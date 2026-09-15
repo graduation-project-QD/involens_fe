@@ -118,9 +118,7 @@ export default function UploadPage() {
           </p>
         )}
       </section>
-      <p className="mt-3 text-[11px] text-slate-400">
-        Dữ liệu trạng thái minh họa · Chưa kết nối API tải lên.
-      </p>
+      
       <dialog
         ref={preview}
         aria-labelledby="document-preview-title"

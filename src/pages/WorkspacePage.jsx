@@ -10,7 +10,7 @@ const titles = {
   invoices: 'Hóa đơn đã trích xuất',
   activity: 'Nhật ký thao tác',
 }
-const filters = { approvals: 'pending', errors: 'error', invoices: 'success' }
+const filters = { approvals: 'pending', errors: 'error' }
 
 /** Hiển thị nội dung trang tài liệu bên trong layout dùng chung. */
 export default function WorkspacePage({ kind }) {
@@ -25,8 +25,13 @@ export default function WorkspacePage({ kind }) {
       ) : (
         <DocumentsTable
           title={titles[kind]}
+          management={kind === 'documents'}
+          invoices={kind === 'invoices'}
+          approvals={kind === 'approvals'}
           documents={
-            filters[kind]
+            kind === 'invoices'
+              ? recentDocuments.filter((item) => item.status !== 'uploaded')
+              : filters[kind]
               ? recentDocuments.filter((item) => item.status === filters[kind])
               : recentDocuments
           }
