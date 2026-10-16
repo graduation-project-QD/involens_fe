@@ -2,11 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from '../components/navigation/Sidebar'
+import { DocumentStatusProvider } from '../context/DocumentStatusContext'
 
+/** Hosts authenticated navigation and live updates only on the approved document routes. */
 export default function DashboardLayout() {
+  console.debug('[DashboardLayout] Rendering authenticated workspace')
   const [open, setOpen] = useState(false)
   const drawer = useRef(null)
   const { pathname } = useLocation()
+  const liveDocuments =
+    pathname === '/dashboard' ||
+    pathname === '/documents' ||
+    /^\/documents\/[^/]+$/.test(pathname)
   useEffect(() => {
     setOpen(false)
   }, [pathname])
@@ -31,7 +38,13 @@ export default function DashboardLayout() {
           <span className="text-sm font-bold">Involens</span>
         </div>
         <main className="mx-auto max-w-[1600px] p-5 lg:p-8">
-          <Outlet />
+          {liveDocuments ? (
+            <DocumentStatusProvider>
+              <Outlet />
+            </DocumentStatusProvider>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
       <dialog

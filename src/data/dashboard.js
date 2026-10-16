@@ -134,3 +134,99 @@ export const recentDocuments = [
     supplier: 'Taxi',
   },
 ]
+
+export const errorDocuments = [
+  {
+    id: 1,
+    documentId: 'DOC-1038',
+    name: 've_vietnam_airlines.pdf',
+    reason: 'AI Service không phản hồi (timeout sau 30s)',
+    retryCount: 2,
+    lastProcessedDate: '09/09/2026',
+    lastProcessedTime: '17:05',
+  },
+  {
+    id: 2,
+    documentId: 'DOC-1031',
+    name: 'bien_lai_taxi_mai_linh.jpg',
+    reason: 'File ảnh bị hỏng, không đọc được dữ liệu',
+    retryCount: 1,
+    lastProcessedDate: '08/09/2026',
+    lastProcessedTime: '21:40',
+  },
+  {
+    id: 3,
+    documentId: 'DOC-1025',
+    name: 'hoadon_dt_fpt_shop.pdf',
+    reason: 'Không phát hiện được vùng văn bản hóa đơn',
+    retryCount: 3,
+    lastProcessedDate: '08/09/2026',
+    lastProcessedTime: '15:12',
+  },
+  {
+    id: 4,
+    documentId: 'DOC-1014',
+    name: 'coopmart_receipt.jpg',
+    reason: 'AI Service không phản hồi (timeout sau 30s)',
+    retryCount: 1,
+    lastProcessedDate: '07/09/2026',
+    lastProcessedTime: '10:02',
+  },
+]
+
+export const activityLogs = [
+  {
+    id: 1,
+    date: '10/09',
+    time: '09:02',
+    segments: [
+      { text: 'Nguyễn Hoàng', emphasis: true },
+      { text: ' tải lên tài liệu ' },
+      { text: 'circlek_nguyentrai.jpg', emphasis: true },
+    ],
+  },
+  {
+    id: 2,
+    date: '10/09',
+    time: '09:03',
+    segments: [
+      { text: 'Hệ thống', emphasis: true },
+      { text: ' bắt đầu xử lý AI cho ' },
+      { text: 'DOC-1041', tone: 'brand' },
+    ],
+  },
+  {
+    id: 3,
+    date: '10/09',
+    time: '09:04',
+    segments: [
+      { text: 'AI', emphasis: true },
+      { text: ' trích xuất hoàn tất — độ tin cậy trung bình ' },
+      { text: '88%', emphasis: true },
+      { text: ', chuyển sang ' },
+      { text: 'Chờ duyệt', tone: 'warning' },
+    ],
+  },
+  {
+    id: 4,
+    date: '10/09',
+    time: '09:18',
+    segments: [
+      { text: 'Trần Thị B', emphasis: true },
+      { text: ' sửa trường Tổng tiền ' },
+      { text: '120.000đ', tone: 'danger' },
+      { text: ' → ' },
+      { text: '128.000đ', tone: 'success' },
+    ],
+  },
+  {
+    id: 5,
+    date: '10/09',
+    time: '09:11',
+    segments: [
+      { text: 'Trần Thị B', emphasis: true },
+      { text: ' duyệt tài liệu ' },
+      { text: 'DOC-1041', tone: 'brand' },
+    ],
+  },
+]

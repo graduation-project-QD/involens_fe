@@ -1,149 +1,164 @@
-import { useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/ui/PageHeader'
 import Button from '../components/ui/Button'
 import UploadDropzone from '../components/upload/UploadDropzone'
 import UploadFileRow from '../components/upload/UploadFileRow'
+import { uploadDocuments } from '../api/documents'
 
-// Design fixtures only; these rows do not represent server uploads.
-const exampleFiles = [
-  {
-    id: 'example-upload',
-    name: 'circlek_nguyentrai.jpg',
-    extension: 'JPG',
-    status: 'uploading',
-    progress: 26,
-    message: '2.4 MB – đang tải lên',
-  },
-  {
-    id: 'example-success',
-    name: 'grab_bill_090926.pdf',
-    extension: 'PDF',
-    status: 'success',
-    message: 'Tải lên thành công – Document ID: DOC-1043 – Đã tải lên',
-  },
-  {
-    id: 'example-error',
-    name: 'bao_cao_thang.docx',
-    extension: 'DOCX',
-    status: 'error',
-    message: 'Lỗi: Định dạng .docx không được hỗ trợ (chỉ JPG/PNG/PDF)',
-  },
-]
-
-/** Quản lý danh sách tài liệu cục bộ và trình bày các trạng thái tải lên mẫu. */
+/** Validates local files and uploads real batches with independent per-file outcomes. */
 export default function UploadPage() {
-  const [items, setItems] = useState(exampleFiles)
+  console.debug('[Upload] Rendering upload workspace')
+  const [items, setItems] = useState([])
+  const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
-  const [selected, setSelected] = useState(null)
-  const preview = useRef(null)
-
-  /** Kiểm tra định dạng và giới hạn 10 MB, sau đó thêm từng tệp vào danh sách. */
+  const navigate = useNavigate()
+  /** Adds selected files after checking the backend size, extension and MIME requirements. */
   function addFiles(files) {
+    console.info('[Upload] Validating selected files', { count: files.length })
+    if (busy) return
+    const mimeTypes = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      pdf: 'application/pdf',
+    }
     const added = files.map((file) => {
       const extension = file.name.split('.').pop().toLowerCase()
-      const supported = /\.(jpg|jpeg|png|pdf)$/i.test(file.name)
-      const error = !supported
-        ? `Lỗi: Định dạng không được hỗ trợ (chỉ JPG/JPEG/PNG/PDF)`
+      const error = !file.size
+        ? 'Tệp không được rỗng.'
         : file.size > 10 * 1024 * 1024
-          ? 'Lỗi: Tệp vượt quá dung lượng tối đa 10 MB'
-          : ''
+          ? 'Tệp vượt quá 10 MB.'
+          : !mimeTypes[extension] || file.type !== mimeTypes[extension]
+            ? 'Định dạng hoặc MIME không hợp lệ (JPG/JPEG/PNG/PDF).'
+            : ''
+      if (error)
+        console.warn('[Upload] File validation failed', { reason: error })
       return {
         id: crypto.randomUUID(),
+        file,
         name: file.name,
-        extension: extension.toUpperCase().slice(0, 5),
+        extension: extension.toUpperCase(),
         status: error ? 'error' : 'ready',
-        message:
-          error ||
-          `${(file.size / (1024 * 1024)).toFixed(1)} MB – Sẵn sàng tải lên`,
+        message: error || 'Sẵn sàng tải lên',
       }
-    })
-    console.debug('[Upload] Files validated', {
-      count: added.length,
-      errors: added.filter((item) => item.status === 'error').length,
     })
     setItems((current) => [...current, ...added])
     setNotice('')
   }
-
-  /** Loại bỏ tệp khỏi danh sách cục bộ khi người dùng hủy hoặc xóa. */
+  /** Removes a local selection without deleting any server document. */
   function removeFile(id) {
-    console.debug('[Upload] Removing file row')
-    setItems((current) => current.filter((item) => item.id !== id))
+    console.debug('[Upload] Removing local file selection')
+    if (!busy) setItems((current) => current.filter((item) => item.id !== id))
   }
-
-  /** Mở thông tin tài liệu mẫu; không giả lập nội dung tệp trên máy chủ. */
+  /** Opens the uploaded document using the UUID returned by the backend. */
   function viewFile(item) {
-    console.debug('[Upload] Opening sample document details')
-    setSelected(item)
-    preview.current?.showModal()
+    console.debug('[Upload] Opening uploaded document')
+    navigate('/documents/' + item.documentId)
   }
-
-  /** Thông báo trạng thái tích hợp khi người dùng yêu cầu gửi tài liệu. */
-  function uploadFiles() {
-    console.debug('[Upload] Upload requested; API not configured')
-    setNotice(
-      'Chưa kết nối API tải lên. Tài liệu chưa được gửi hoặc xử lý trên máy chủ.',
+  /** Sends ready files once and displays each returned upload status without claiming AI completion. */
+  async function uploadFiles() {
+    if (busy) return
+    const ready = items.filter((item) => item.status === 'ready')
+    if (!ready.length) return
+    console.info('[Upload] Sending batch', { count: ready.length })
+    setBusy(true)
+    setNotice('')
+    setItems((current) =>
+      current.map((item) =>
+        ready.some((candidate) => candidate.id === item.id)
+          ? { ...item, status: 'uploading', message: 'Đang gửi tài liệu...' }
+          : item,
+      ),
     )
+    try {
+      const data = await uploadDocuments(ready.map((item) => item.file))
+      if (!Array.isArray(data.items) || data.items.length !== ready.length)
+        throw new Error(
+          'Kết quả upload không khớp số tệp đã gửi. Kiểm tra danh sách tài liệu trước khi gửi lại.',
+        )
+      const remainingResults = [...data.items]
+      const updates = new Map(
+        ready.map((item) => {
+          const index = remainingResults.findIndex(
+            (result) => result.original_filename === item.name,
+          )
+          if (index < 0)
+            throw new Error(
+              'Kết quả upload không khớp tên tệp đã gửi. Kiểm tra danh sách tài liệu trước khi gửi lại.',
+            )
+          const [result] = remainingResults.splice(index, 1)
+          const success = result.upload_status === 'UPLOADED'
+          return [
+            item.id,
+            {
+              ...item,
+              status: success ? 'success' : 'error',
+              documentId: result.id,
+              message: success
+                ? 'Đã tải lên · ' + result.id
+                : (result.error_code || 'UPLOAD_FAILED') +
+                  ': ' +
+                  (result.error_message || 'Tải lên thất bại'),
+            },
+          ]
+        }),
+      )
+      setItems((current) => current.map((item) => updates.get(item.id) || item))
+      setNotice(
+        'Đã nhận kết quả upload. Việc tải lên chưa bảo đảm dữ liệu AI đã có; xem trạng thái trong chi tiết tài liệu.',
+      )
+      window.dispatchEvent(new Event('involens:documents-changed'))
+      console.info('[Upload] Batch completed')
+    } catch (failure) {
+      setNotice(failure.message)
+      setItems((current) =>
+        current.map((item) =>
+          ready.some((candidate) => candidate.id === item.id)
+            ? { ...item, status: 'error', message: failure.message }
+            : item,
+        ),
+      )
+    } finally {
+      setBusy(false)
+    }
   }
-
   return (
     <>
       <PageHeader
         title="Tải lên tài liệu"
-        description="Upload hóa đơn / biên lai để hệ thống tự động xử lý và trích xuất dữ liệu."
+        description="Tải hóa đơn / biên lai lên hệ thống"
       />
-      <section className="rounded-md border border-slate-200/70 bg-white p-5 sm:p-7">
-        <UploadDropzone onFiles={addFiles} />
-        <ul aria-label="Danh sách tệp tải lên" className="mt-5 space-y-2.5">
-          {items.map((item) => (
-            <UploadFileRow
-              key={item.id}
-              item={item}
-              onRemove={removeFile}
-              onView={viewFile}
-            />
-          ))}
-        </ul>
+      <section className="rounded-md border border-slate-200 bg-white p-6">
+        <fieldset disabled={busy}>
+          <UploadDropzone onFiles={addFiles} />
+          <ul
+            className="mt-5 max-h-[300px] space-y-3 overflow-y-auto"
+            aria-label="Danh sách tệp tải lên"
+          >
+            {items.map((item) => (
+              <UploadFileRow
+                key={item.id}
+                item={item}
+                onRemove={removeFile}
+                onView={viewFile}
+              />
+            ))}
+          </ul>
+        </fieldset>
         <Button
+          disabled={busy || !items.some((item) => item.status === 'ready')}
           onClick={uploadFiles}
-          disabled={items.length === 0}
           className="mt-5 h-10 w-full"
         >
-          Upload &amp; Xử lý
+          {busy ? 'Đang tải lên...' : 'Upload & Xử lý'}
         </Button>
         {notice && (
-          <p role="status" className="mt-3 text-xs text-slate-500">
+          <p role="status" className="mt-3 text-xs text-slate-600">
             {notice}
           </p>
         )}
       </section>
-      
-      <dialog
-        ref={preview}
-        aria-labelledby="document-preview-title"
-        className="fixed inset-0 m-auto w-[calc(100%-40px)] max-w-md rounded-lg border border-slate-200 bg-white p-6 backdrop:bg-slate-950/40"
-      >
-        <div className="flex items-center justify-between gap-4">
-          <h2 id="document-preview-title" className="text-sm font-semibold">
-            Thông tin tài liệu mẫu
-          </h2>
-          <button
-            type="button"
-            onClick={() => preview.current?.close()}
-            aria-label="Đóng thông tin tài liệu"
-            className="p-1"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <p className="mt-5 break-all text-sm font-medium">{selected?.name}</p>
-        <p className="mt-2 text-xs text-slate-500">{selected?.message}</p>
-        <p className="mt-4 text-xs text-slate-500">
-          Đây là dữ liệu minh họa giao diện, chưa có tệp trên máy chủ để xem
-          trước.
-        </p>
-      </dialog>
     </>
   )
 }

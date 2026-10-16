@@ -1,4 +1,6 @@
+/** Visualizes daily document upload counts supplied by the backend summary. */
 export default function ActivityChart({ data }) {
+  console.debug('[ActivityChart] Rendering daily upload counts')
   const max = Math.max(...data.map((item) => item.value), 1)
   return (
     <section
@@ -6,7 +8,7 @@ export default function ActivityChart({ data }) {
       aria-labelledby="chart-title"
     >
       <h2 id="chart-title" className="text-sm font-semibold">
-        Số tài liệu xử lý theo ngày
+        Số tài liệu tải lên theo ngày
       </h2>
       <p className="mt-1 text-[11px] text-slate-500">7 ngày gần nhất</p>
       <div className="mt-7 flex h-36 items-end gap-2 sm:gap-4">

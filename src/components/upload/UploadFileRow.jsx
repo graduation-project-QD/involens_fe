@@ -17,9 +17,20 @@ const colors = {
   },
 }
 
+const fileTypeColors = {
+  PDF: 'bg-red-50 text-red-600',
+  JPG: 'bg-blue-50 text-blue-600',
+  JPEG: 'bg-blue-50 text-blue-600',
+  PNG: 'bg-green-50 text-green-600',
+}
+
 /** Hiển thị trạng thái một tài liệu và hành động phù hợp: hủy, xem hoặc xóa. */
 export default function UploadFileRow({ item, onRemove, onView }) {
+  console.debug('[UploadFileRow] Rendering upload outcome', {
+    status: item.status,
+  })
   const style = colors[item.status]
+  const badgeColor = fileTypeColors[item.extension] || style.badge
   const success = item.status === 'success'
   const error = item.status === 'error'
   return (
@@ -27,7 +38,7 @@ export default function UploadFileRow({ item, onRemove, onView }) {
       className={`flex items-center gap-3 rounded-md border px-3.5 py-3 ${style.row}`}
     >
       <span
-        className={`flex h-9 w-11 shrink-0 items-center justify-center rounded text-[10px] font-bold ${style.badge}`}
+        className={`flex h-9 w-11 shrink-0 items-center justify-center rounded text-[10px] font-bold ${badgeColor}`}
       >
         {item.extension}
       </span>
@@ -53,18 +64,22 @@ export default function UploadFileRow({ item, onRemove, onView }) {
           >
             <div
               className="h-full bg-brand"
-              style={{ width: `${item.progress}%` }}
+              style={{
+                width:
+                  item.progress === undefined ? '100%' : item.progress + '%',
+              }}
             />
           </div>
         )}
       </div>
       <button
         type="button"
+        disabled={item.status === 'uploading'}
         onClick={() => (success ? onView(item) : onRemove(item.id))}
-        aria-label={`${success ? 'Xem' : item.status === 'uploading' ? 'Hủy' : 'Xóa'} ${item.name}`}
-        className={`shrink-0 rounded px-3 py-1.5 text-xs ${success ? 'border border-emerald-200 bg-white text-brand hover:bg-emerald-50' : error ? 'text-red-600 hover:bg-red-100' : 'text-slate-500 hover:bg-slate-100'}`}
+        aria-label={`${success ? 'Xem' : item.status === 'uploading' ? 'Đang gửi' : 'Xóa'} ${item.name}`}
+        className={`shrink-0 rounded px-3 py-1.5 text-xs ${success ? 'border border-emerald-200 bg-white text-brand hover:bg-emerald-50' : item.status === 'uploading' ? 'text-slate-500 hover:bg-slate-100' : 'border border-red-200 bg-red-50 text-red-600 hover:border-red-300 hover:bg-red-100'}`}
       >
-        {success ? 'Xem' : item.status === 'uploading' ? 'Hủy' : 'Xóa'}
+        {success ? 'Xem' : item.status === 'uploading' ? 'Đang gửi' : 'Xóa'}
       </button>
     </li>
   )

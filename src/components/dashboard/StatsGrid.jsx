@@ -1,5 +1,6 @@
 /** Hiển thị các chỉ số tổng quan từ items thành từng ô thống kê riêng biệt. */
 export default function StatsGrid({ items }) {
+  console.debug('[StatsGrid] Rendering document statistics', { count: items.length })
   return (
     <section
       aria-label="Thống kê tài liệu"
@@ -15,7 +16,7 @@ export default function StatsGrid({ items }) {
           >
             {item.value}
           </p>
-          <p className="mt-3 text-sm text-slate-500">{item.label}</p>
+          <p className={`mt-3 text-sm ${item.color}`}>{item.label}</p>
         </div>
       ))}
     </section>
