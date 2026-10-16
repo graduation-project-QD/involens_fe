@@ -1,11 +1,12 @@
 import axios from 'axios'
 
 export const SESSION_KEY = 'involens.session'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 let refreshOperation = null
 let sessionRevision = 0
 
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8080/api/v1',
+  baseURL: apiBaseUrl,
   headers: { Accept: 'application/json' },
   validateStatus: null,
 })
@@ -109,7 +110,7 @@ export async function request(
   } = {},
 ) {
   console.info('[API] Starting operation', { method, path })
-  const url = new URL('/api/v1' + path, 'http://localhost:8080')
+  const url = new URL(apiBaseUrl.replace(/\/$/, '') + path)
   for (const [key, value] of Object.entries(query || {})) {
     if (value !== '' && value !== undefined && value !== null)
       url.searchParams.set(key, value)

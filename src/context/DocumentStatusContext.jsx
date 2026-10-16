@@ -128,7 +128,7 @@ export function DocumentStatusProvider({ children }) {
         if (disposed) return
         rejectedToken = null
         const connection = new Client({
-          brokerURL: 'ws://localhost:8080/ws',
+          brokerURL: import.meta.env.VITE_WS_URL,
           connectHeaders: { Authorization: 'Bearer ' + session.accessToken },
           reconnectDelay: 0,
           // Never enable STOMP frame logging: CONNECT contains the access token.
