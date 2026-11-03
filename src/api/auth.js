@@ -1,4 +1,4 @@
-import { request } from './client'
+import { getValidSession, request } from './client'
 /** Replaces the selected account's password through the manager session without logging credentials. */
 export function resetAccountPassword(accountId, body) {
   console.info('[Accounts] Password reset requested', { accountId })
@@ -55,8 +55,12 @@ export function getMe() {
   console.debug('[Auth] Identity requested')
   return request('/auth/me')
 }
-/** Confirms logout with the backend before the client clears its token. */
-export function logout() {
+/** Revokes the current refresh token using valid credentials before local logout. */
+export async function logout() {
   console.debug('[Auth] Logout requested')
-  return request('/auth/logout', { method: 'POST' })
+  const session = await getValidSession()
+  return request('/auth/logout', {
+    method: 'POST',
+    body: { refreshToken: session.refreshToken },
+  })
 }

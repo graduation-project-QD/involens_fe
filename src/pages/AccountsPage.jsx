@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Eye, Trash2, UserPlus } from 'lucide-react'
+import { Eye, Trash2, UserPlus } from 'lucide-react'
 import { deleteAccount, getAccounts } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
 import PageHeader from '../components/ui/PageHeader'
-import Button from '../components/ui/Button'
+import TablePagination from '../components/ui/TablePagination'
 
 const roleLabels = { MANAGER: 'Quản lý', EMPLOYEE: 'Nhân viên' }
 const statusLabels = { ACTIVE: 'Hoạt động', LOCKED: 'Đã khóa' }
@@ -30,6 +30,7 @@ function AccountList() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -72,7 +73,7 @@ function AccountList() {
       setLoading(false)
     }
 
-    getAccounts({ page, page_size: 8 }, controller.signal)
+    getAccounts({ page, page_size: pageSize }, controller.signal)
       .then(receiveAccounts)
       .catch(reportFailure)
       .finally(finishLoading)
@@ -83,7 +84,7 @@ function AccountList() {
       controller.abort()
     }
     return cancelRequest
-  }, [page, reloadVersion])
+  }, [page, pageSize, reloadVersion])
 
   /** Shows account deletion confirmation while blocking background interaction. */
   useEffect(() => {
@@ -157,14 +158,20 @@ function AccountList() {
   }
 
   /** Requests the adjacent backend page within the returned pagination bounds. */
-  function changePage(event) {
-    const nextPage = Number(event.currentTarget.dataset.page)
+  function changePage(nextPage) {
     if (loading || !result || nextPage < 1 || nextPage > Math.ceil(result.total / result.page_size)) {
       console.debug('[Accounts] Page change unavailable', { nextPage })
       return
     }
     console.info('[Accounts] Changing account page', { page: nextPage })
     setPage(nextPage)
+  }
+
+  /** Reloads accounts from the first page using the selected number of rows. */
+  function changePageSize(nextSize) {
+    console.info('[Accounts] Changing rows per page', { pageSize: nextSize })
+    setPageSize(nextSize)
+    setPage(1)
   }
 
   /** Opens account details from a row click while preserving its separate action controls. */
@@ -184,12 +191,12 @@ function AccountList() {
     console.debug('[Accounts] Rendering account row', { accountId: account.id })
     return (
       <tr key={account.id} data-account-id={account.id} onClick={openAccountDetails} className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-emerald-50/60">
-        <td className="p-3">{account.id}</td>
-        <td className="p-3 font-medium text-brand">{account.email}</td>
-        <td className="p-3">{account.fullName}</td>
-        <td className="p-3">{roleLabels[account.role] || account.role}</td>
+        <td title={account.id} className="truncate p-3">{account.id}</td>
+        <td title={account.email} className="truncate p-3 font-medium text-brand">{account.email}</td>
+        <td title={account.fullName} className="truncate p-3">{account.fullName}</td>
+        <td title={roleLabels[account.role] || account.role} className="truncate p-3">{roleLabels[account.role] || account.role}</td>
         <td className="p-3">
-          <span className={'inline-flex rounded-full px-2 py-1 text-[10px] font-medium ' + (statusColors[account.status] || 'bg-slate-100 text-slate-600')}>
+          <span title={statusLabels[account.status] || account.status} className={'inline-block max-w-full truncate rounded-full px-2 py-1 text-[10px] font-medium ' + (statusColors[account.status] || 'bg-slate-100 text-slate-600')}>
             {statusLabels[account.status] || account.status}
           </span>
         </td>
@@ -256,7 +263,16 @@ function AccountList() {
       <section aria-busy={loading} className="min-w-0 rounded-md border border-slate-200 bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold">Danh sách tài khoản</h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px] text-left text-xs">
+          <table className="w-full min-w-[850px] table-fixed text-left text-xs">
+            <colgroup>
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '24%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '10%' }} />
+            </colgroup>
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th scope="col" className="p-3">ID</th>
@@ -272,20 +288,17 @@ function AccountList() {
           </table>
         </div>
         {!loading && !error && !result?.items.length && <p className="py-8 text-center text-sm text-slate-500">Không có tài khoản.</p>}
+        {result && (
+          <TablePagination
+            page={result.page}
+            pageSize={result.page_size}
+            total={result.total}
+            loading={loading}
+            onPageChange={changePage}
+            onPageSizeChange={changePageSize}
+          />
+        )}
       </section>
-      {result && (
-        <footer className="mt-4 flex items-center justify-between text-xs text-slate-500">
-          <span>{result.total} kết quả · Trang {result.page} / {Math.max(1, Math.ceil(result.total / result.page_size))}</span>
-          <div className="flex gap-2">
-            <Button aria-label="Trang trước" title="Trang trước" disabled={loading || result.page <= 1} data-page={result.page - 1} onClick={changePage}>
-              <ChevronLeft size={18} aria-hidden="true" />
-            </Button>
-            <Button aria-label="Trang sau" title="Trang sau" disabled={loading || result.page * result.page_size >= result.total} data-page={result.page + 1} onClick={changePage}>
-              <ChevronRight size={18} aria-hidden="true" />
-            </Button>
-          </div>
-        </footer>
-      )}
     </>
   )
 }

@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/ui/PageHeader'
 import Button from '../components/ui/Button'
 import UploadDropzone from '../components/upload/UploadDropzone'
 import UploadFileRow from '../components/upload/UploadFileRow'
-import { uploadDocuments } from '../api/documents'
+import { deleteDocument, uploadDocuments } from '../api/documents'
 
 /** Validates local files and uploads real batches with independent per-file outcomes. */
 export default function UploadPage() {
@@ -12,11 +12,14 @@ export default function UploadPage() {
   const [items, setItems] = useState([])
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [deletingId, setDeletingId] = useState(null)
+  const deletePendingRef = useRef(false)
+  const nextFileId = useRef(0)
   const navigate = useNavigate()
   /** Adds selected files after checking the backend size, extension and MIME requirements. */
   function addFiles(files) {
     console.info('[Upload] Validating selected files', { count: files.length })
-    if (busy) return
+    if (busy || deletePendingRef.current) return
     const mimeTypes = {
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
@@ -35,7 +38,7 @@ export default function UploadPage() {
       if (error)
         console.warn('[Upload] File validation failed', { reason: error })
       return {
-        id: crypto.randomUUID(),
+        id: nextFileId.current++,
         file,
         name: file.name,
         extension: extension.toUpperCase(),
@@ -46,10 +49,39 @@ export default function UploadPage() {
     setItems((current) => [...current, ...added])
     setNotice('')
   }
-  /** Removes a local selection without deleting any server document. */
-  function removeFile(id) {
-    console.debug('[Upload] Removing local file selection')
-    if (!busy) setItems((current) => current.filter((item) => item.id !== id))
+  /** Deletes a failed upload record by its returned ID, or removes a file that has no server record. */
+  async function removeFile(id) {
+    if (busy || deletePendingRef.current) return
+    const item = items.find((candidate) => candidate.id === id)
+    if (!item || !['ready', 'error'].includes(item.status)) return
+    if (!item.documentId) {
+      console.debug('[Upload] Removing local file selection', { id })
+      setItems((current) => current.filter((candidate) => candidate.id !== id))
+      return
+    }
+    deletePendingRef.current = true
+    setDeletingId(id)
+    setItems((current) => current.map((candidate) =>
+      candidate.id === id ? { ...candidate, deleteError: '' } : candidate,
+    ))
+    console.info('[Upload] Deleting failed upload record', { documentId: item.documentId })
+    try {
+      await deleteDocument(item.documentId)
+      setItems((current) => current.filter((candidate) => candidate.id !== id))
+      window.dispatchEvent(new Event('involens:documents-changed'))
+      console.info('[Upload] Failed upload record deleted', { documentId: item.documentId })
+    } catch (failure) {
+      console.error('[Upload] Failed to delete upload record', {
+        documentId: item.documentId,
+        message: failure.message,
+      })
+      setItems((current) => current.map((candidate) =>
+        candidate.id === id ? { ...candidate, deleteError: failure.message } : candidate,
+      ))
+    } finally {
+      deletePendingRef.current = false
+      setDeletingId(null)
+    }
   }
   /** Opens the uploaded document using the UUID returned by the backend. */
   function viewFile(item) {
@@ -58,7 +90,7 @@ export default function UploadPage() {
   }
   /** Sends ready files once and displays each returned upload status without claiming AI completion. */
   async function uploadFiles() {
-    if (busy) return
+    if (busy || deletePendingRef.current) return
     const ready = items.filter((item) => item.status === 'ready')
     if (!ready.length) return
     console.info('[Upload] Sending batch', { count: ready.length })
@@ -130,7 +162,7 @@ export default function UploadPage() {
         description="Tải hóa đơn / biên lai lên hệ thống"
       />
       <section className="rounded-md border border-slate-200 bg-white p-6">
-        <fieldset disabled={busy}>
+        <fieldset disabled={busy || deletingId !== null}>
           <UploadDropzone onFiles={addFiles} />
           <ul
             className="mt-5 max-h-[300px] space-y-3 overflow-y-auto"
@@ -140,6 +172,7 @@ export default function UploadPage() {
               <UploadFileRow
                 key={item.id}
                 item={item}
+                deleting={deletingId === item.id}
                 onRemove={removeFile}
                 onView={viewFile}
               />
@@ -147,7 +180,7 @@ export default function UploadPage() {
           </ul>
         </fieldset>
         <Button
-          disabled={busy || !items.some((item) => item.status === 'ready')}
+          disabled={busy || deletingId !== null || !items.some((item) => item.status === 'ready')}
           onClick={uploadFiles}
           className="mt-5 h-10 w-full"
         >

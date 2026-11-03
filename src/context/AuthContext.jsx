@@ -92,15 +92,19 @@ export function AuthProvider({ children }) {
     setError('')
     console.info('[Auth] Login completed')
   }
-  /** Calls stateless logout and clears local credentials even if the call fails. */
+  /** Revokes the server session and clears local credentials even when logout fails. */
   async function signOut() {
     console.info('[Auth] Starting logout')
-    const operation = logout()
-    clearSession()
+    setError('')
     try {
-      await operation
+      await logout()
+      console.info('[Auth] Server logout completed')
     } catch (failure) {
-      setError(failure.message)
+      console.warn('[Auth] Server logout failed', { httpStatus: failure.httpStatus })
+    } finally {
+      clearSession()
+      setError('')
+      console.info('[Auth] Local logout completed')
     }
   }
   return (

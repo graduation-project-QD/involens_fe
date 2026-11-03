@@ -20,7 +20,14 @@ export default function ErrorDocumentsTable({ documents }) {
   return (
     <section className="min-w-0 rounded-md border border-slate-200/70 bg-white p-4 sm:p-6">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[850px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[850px] table-fixed border-collapse text-left text-xs">
+          <colgroup>
+            <col style={{ width: '27%' }} />
+            <col style={{ width: '30%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '17%' }} />
+            <col style={{ width: '13%' }} />
+          </colgroup>
           <thead className="bg-[#f7f9fc] text-[11px] text-slate-500">
             <tr>
               <th scope="col" className="px-4 py-3 font-medium">Tên tài liệu</th>
@@ -33,11 +40,11 @@ export default function ErrorDocumentsTable({ documents }) {
           <tbody>
             {documents.map((document) => (
               <tr key={document.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
-                <td className="w-[27%] px-4 py-3.5">
-                  <p className="font-medium text-slate-800">{document.name}</p>
-                  <p className="mt-0.5 text-[10px] text-slate-400">{document.documentId}</p>
+                <td className="px-4 py-3.5">
+                  <p title={document.name} className="truncate font-medium text-slate-800">{document.name}</p>
+                  <p title={document.documentId} className="mt-0.5 truncate text-[10px] text-slate-400">{document.documentId}</p>
                 </td>
-                <td className="w-[35%] px-4 py-3.5 text-red-500">{document.reason}</td>
+                <td title={document.reason} className="truncate px-4 py-3.5 text-red-500">{document.reason}</td>
                 <td className="px-4 py-3.5 text-center text-slate-600">{document.retryCount}</td>
                 <td className="px-4 py-3.5">
                   <p className="text-[11px] text-slate-500">{document.lastProcessedDate}</p>

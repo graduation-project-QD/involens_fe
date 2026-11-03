@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
@@ -8,20 +8,26 @@ import {
   CloudUpload,
   FileSearch,
   FileText,
+  Info,
   LoaderCircle,
   RefreshCw,
+  RotateCcw,
   Settings,
+  Trash2,
+  TriangleAlert,
   X,
   WifiOff,
 } from 'lucide-react'
 import {
   canRetryExtraction,
+  deleteDocument,
   getDocument,
   getExtraction,
   retryExtraction,
   saveExtraction,
 } from '../api/documents'
 import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
 import { useDocumentStatusRefresh } from '../context/DocumentStatusContext'
 
@@ -35,8 +41,106 @@ const emptyInvoice = {
   currency: '',
 }
 
+/** Highlights a document section title and keeps its related actions beside the heading. */
+function DetailSectionHeader({ title, as: Heading = 'h2', children }) {
+  console.debug('[DetailSectionHeader] Rendering document section heading', { title })
+  return (
+    <div className="detail-section-header -mx-5 -mt-5 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-brand/15 bg-emerald-50 px-4 py-3">
+      <Heading className="flex min-w-0 items-center gap-2.5 text-base font-bold leading-6 text-brand">
+        {title}
+      </Heading>
+      {children}
+    </div>
+  )
+}
+
+/** Lets reviewers inspect the original invoice image using Ctrl and the mouse wheel. */
+function ZoomableInvoiceImage({ src, alt, onLoad, onError, viewportClassName }) {
+  console.debug('[InvoiceImage] Rendering original invoice preview')
+  const viewportRef = useRef(null)
+  const zoomRef = useRef(100)
+  const [zoom, setZoom] = useState(100)
+  const [loaded, setLoaded] = useState(false)
+
+  /** Captures Ctrl-wheel inside the image preview without changing the page zoom. */
+  useEffect(() => {
+    const viewport = viewportRef.current
+    console.debug('[InvoiceImage] Enabling invoice image zoom')
+
+    /** Changes the invoice magnification within the approved inspection range. */
+    function handleWheel(event) {
+      if (!event.ctrlKey) return
+      event.preventDefault()
+      if (!event.deltaY) return
+      const nextZoom = Math.min(300, Math.max(50, zoomRef.current + (event.deltaY < 0 ? 25 : -25)))
+      if (nextZoom === zoomRef.current) return
+      zoomRef.current = nextZoom
+      setZoom(nextZoom)
+      console.debug('[InvoiceImage] Invoice magnification changed', { zoom: nextZoom })
+    }
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false })
+    /** Releases the preview's wheel listener when the invoice is no longer displayed. */
+    return () => {
+      viewport.removeEventListener('wheel', handleWheel)
+      console.debug('[InvoiceImage] Disabled invoice image zoom')
+    }
+  }, [])
+
+  /** Restores the invoice to its initial fitted size and returns to its top-left corner. */
+  function handleReset() {
+    console.debug('[InvoiceImage] Resetting invoice magnification')
+    zoomRef.current = 100
+    setZoom(100)
+    viewportRef.current.scrollTo({ left: 0, top: 0 })
+    console.debug('[InvoiceImage] Invoice magnification reset')
+  }
+
+  /** Enables inspection controls after the original invoice image loads successfully. */
+  function handleLoad(event) {
+    console.debug('[InvoiceImage] Original invoice image loaded')
+    setLoaded(true)
+    onLoad(event)
+  }
+
+  return (
+    <div className="min-w-0">
+      {loaded && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <span>Ctrl + lăn chuột để zoom · {zoom}%</span>
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={zoom === 100}
+            className="rounded-md border border-slate-200 px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Đặt lại
+          </button>
+        </div>
+      )}
+      <div
+        ref={viewportRef}
+        role="region"
+        aria-label="Ảnh hóa đơn gốc, giữ Ctrl và lăn chuột để phóng to hoặc thu nhỏ"
+        tabIndex={0}
+        className={'w-full overflow-auto rounded-xl border border-slate-200 bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ' + viewportClassName}
+      >
+        <div style={{ width: zoom + '%', height: zoom + '%' }}>
+          <img
+            src={src}
+            alt={alt}
+            onLoad={handleLoad}
+            onError={onError}
+            className="block h-full w-full max-w-none object-contain"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Shows document progress and marks the failed business stage from the current server state. */
-function DocumentPipeline({ status, compact = false }) {
+function DocumentPipeline({ status, compact = false, showTitle = true }) {
   console.debug('[DocumentPipeline] Rendering document progress', { status })
   const extractionStates = [
     'REVIEW_REQUIRED',
@@ -111,17 +215,13 @@ function DocumentPipeline({ status, compact = false }) {
       aria-label="Tiến trình tài liệu"
       className={
         compact
-          ? 'rounded-xl border border-slate-200 bg-white p-5'
+          ? 'detail-card rounded-xl border border-slate-200 bg-white p-5'
           : 'border-t border-slate-200 pt-6'
       }
     >
-      <h3
-        className={
-          compact ? 'mb-4 text-sm font-semibold' : 'mb-6 text-sm font-semibold'
-        }
-      >
-        Tiến trình xử lý
-      </h3>
+      {showTitle && (
+        <DetailSectionHeader title="Tiến trình xử lý" as="h3" />
+      )}
       <div className="overflow-x-auto pb-2 pt-1">
         <ol className={'flex ' + (compact ? 'min-w-[360px]' : 'min-w-[560px]')}>
           {steps.map(
@@ -238,72 +338,60 @@ function DocumentPipeline({ status, compact = false }) {
 
 const invoiceFieldGroups = [
   {
-    title: 'Người bán',
+    title: 'Nhà cung cấp',
     fields: [
       {
         name: 'sellerName',
-        label: 'Tên người bán',
-        required: true,
+        label: 'Nhà cung cấp',
         wide: true,
       },
-      { name: 'sellerAddress', label: 'Địa chỉ người bán' },
+      { name: 'sellerAddress', label: 'Địa chỉ nhà cung cấp' },
       { name: 'taxCode', label: 'Mã số thuế' },
     ],
   },
   {
     title: 'Thông tin hóa đơn',
     fields: [
-      { name: 'invoiceNumber', label: 'Số hóa đơn', required: true },
+      { name: 'invoiceNumber', label: 'Mã hóa đơn' },
       {
         name: 'invoiceDate',
         label: 'Ngày hóa đơn',
-        required: true,
         type: 'date',
       },
       {
         name: 'totalAmount',
         label: 'Tổng tiền',
-        required: true,
         type: 'number',
       },
-      { name: 'currency', label: 'Mã tiền tệ', required: true },
+      { name: 'currency', label: 'Mã tiền tệ' },
     ],
   },
 ]
 
-/** Displays an editable invoice field and identifies required values missing from extracted data. */
-function InvoiceReviewField({ field, value, onChange }) {
-  const missing = field.required && !value.trim()
+/** Displays an editable invoice value and its review warning while leaving validation to the backend. */
+function InvoiceReviewField({ field, value, onChange, warning }) {
+  const warningId = useId()
   console.debug('[InvoiceReviewField] Rendering invoice input', {
     field: field.name,
-    missing,
+    hasWarning: Boolean(warning),
   })
-  const hintId = 'invoice-' + field.name + '-hint'
   return (
-    <label
-      className={'block min-w-0 text-xs ' + (field.wide ? 'sm:col-span-2' : '')}
-    >
+    <label className={'block min-w-0 text-xs ' + (field.wide ? 'sm:col-span-2' : '')}>
       {field.label}
-      {field.required && <span className="text-red-600"> *</span>}
       <input
         name={field.name}
         value={value}
         onChange={onChange}
-        required={field.required}
         type={field.type || 'text'}
         step={field.type === 'number' ? 'any' : undefined}
-        aria-invalid={missing || undefined}
-        aria-describedby={missing ? hintId : undefined}
-        className={
-          'mt-2 h-10 w-full min-w-0 rounded-lg border px-3 text-sm transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10 ' +
-          (missing
-            ? 'border-amber-400 bg-amber-50/40'
-            : 'border-slate-200 bg-white')
-        }
+        aria-describedby={warning ? warningId : undefined}
+        data-warning={warning ? 'true' : undefined}
+        className="mt-2 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10"
       />
-      {missing && (
-        <span id={hintId} className="mt-1 block text-[11px] text-amber-700">
-          Chưa có dữ liệu, vui lòng nhập.
+      {warning && (
+        <span id={warningId} role="status" className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-700">
+          <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>{warning}</span>
         </span>
       )}
     </label>
@@ -312,6 +400,7 @@ function InvoiceReviewField({ field, value, onChange }) {
 
 /** Arranges source files, AI results and editable invoice fields for checking and confirmation. */
 function InvoiceReviewLayout({
+  approval = false,
   document,
   extraction,
   extractionError,
@@ -328,25 +417,33 @@ function InvoiceReviewLayout({
 }) {
   console.debug('[InvoiceReview] Rendering invoice check', {
     documentId: document.id,
+    warningCount: extraction?.warnings?.length ?? 0,
+    itemCount: extraction?.items?.length ?? 0,
   })
-  const missingFields = invoiceFieldGroups
-    .flatMap((group) => group.fields)
-    .filter((field) => field.required && !invoice[field.name].trim())
   const confidence = extraction?.overall_confidence
   const confidencePercent =
     typeof confidence === 'number' && Number.isFinite(confidence)
       ? Math.min(100, Math.max(0, confidence * 100))
       : null
-  const cardClass = 'min-w-0 rounded-xl border border-slate-200 bg-white p-5'
+  const cardClass = 'detail-card min-w-0 rounded-xl border border-slate-200 bg-white p-5'
+  const generalWarnings = []
+  let sellerLowConfidence = false
+  for (const warning of extraction?.warnings ?? []) {
+    if (approval && warning.code === 'LOW_CONFIDENCE' && warning.target === 'fields.seller') {
+      sellerLowConfidence = true
+    } else {
+      generalWarnings.push(warning)
+    }
+  }
   return (
-    <div className="space-y-5">
-      <header>
+    <div className={'document-surface invoice-review-surface space-y-5' + (approval ? ' approval-review-surface' : '')}>
+      <header className="detail-hero min-h-0! pr-0!">
         <Link to={returnTo} className="text-xs text-brand hover:underline">
           ← Quay lại danh sách
         </Link>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">
-            Kiểm tra hóa đơn
+            {approval ? 'Duyệt kết quả trích xuất' : 'Kiểm tra hóa đơn'}
           </h1>
           <StatusBadge status={document.current_state} />
         </div>
@@ -354,7 +451,15 @@ function InvoiceReviewLayout({
           {document.original_filename}
         </p>
       </header>
-      <DocumentPipeline status={document.current_state} compact />
+      {approval && document.current_state === 'REVIEW_REQUIRED' && extraction && (
+        <div role="status" className="approval-ready-banner">
+          <Info size={24} aria-hidden="true" />
+          <div>
+            <p className="font-bold">Hóa đơn đã được trích xuất và đang chờ duyệt</p>
+            <p className="mt-1 text-sm">Vui lòng kiểm tra và xác nhận thông tin hóa đơn bên dưới trước khi phê duyệt.</p>
+          </div>
+        </div>
+      )}
       {document.error_message && (
         <div
           role="alert"
@@ -366,26 +471,14 @@ function InvoiceReviewLayout({
           </p>
         </div>
       )}
-      <div className="grid items-start gap-5 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-        <div className="min-w-0 space-y-5">
+      <div className="invoice-review-grid grid items-start gap-5 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+        <div className={approval ? 'min-w-0 space-y-5' : 'contents'}>
           <section className={cardClass}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold">Hóa đơn gốc</h2>
-              {document.file_url && (
-                <a
-                  href={document.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-brand hover:underline"
-                >
-                  Mở tệp gốc ↗
-                </a>
-              )}
-            </div>
+            <DetailSectionHeader title="Hóa đơn gốc" />
             {!document.file_url ? (
               <div
                 role="status"
-                className="flex min-h-[300px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-6 text-center text-xs text-slate-500"
+                className="detail-file-placeholder flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-6 text-center text-xs text-slate-500"
               >
                 <FileText
                   size={28}
@@ -398,7 +491,7 @@ function InvoiceReviewLayout({
               <iframe
                 src={document.file_url}
                 title={'Hóa đơn PDF: ' + document.original_filename}
-                className="block h-[65vh] min-h-[300px] w-full rounded-xl border border-slate-200"
+                className={'block min-h-[300px] w-full rounded-xl border border-slate-200 ' + (approval ? 'h-[65vh]' : 'h-[90vh]')}
               />
             ) : imageError ? (
               <p
@@ -408,38 +501,41 @@ function InvoiceReviewLayout({
                 Không thể tải ảnh hóa đơn.
               </p>
             ) : (
-              <img
+              <ZoomableInvoiceImage
+                key={document.file_url}
                 src={document.file_url}
                 alt={'Hóa đơn gốc: ' + document.original_filename}
                 onLoad={onImageLoad}
                 onError={onImageError}
-                className="block max-h-[75vh] w-full rounded-xl border border-slate-200 bg-slate-50 object-contain"
+                viewportClassName={approval ? 'h-[75vh]' : 'h-[90vh]'}
               />
             )}
           </section>
-          <section className={cardClass}>
-            <h2 className="mb-4 text-sm font-semibold">Thông tin tệp</h2>
-            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs [&>dt]:text-slate-500 [&>dd]:break-words">
-              <dt>Document ID</dt>
-              <dd className="break-all font-mono text-[11px]">{document.id}</dd>
-              <dt>Loại tệp</dt>
-              <dd>{document.mime_type}</dd>
-              <dt>Kích thước</dt>
-              <dd>{document.file_size} bytes</dd>
-              <dt>Người tải lên</dt>
-              <dd>{document.uploaded_by?.full_name || '—'}</dd>
-              <dt>Thời gian tải lên</dt>
-              <dd>
-                {new Date(document.uploaded_at).toLocaleString('vi-VN', {
-                  timeZone: 'Asia/Ho_Chi_Minh',
-                })}
-              </dd>
-            </dl>
-          </section>
+          {approval && (
+            <section className={cardClass}>
+              <DetailSectionHeader title="Thông tin tệp" />
+              <dl className="review-file-metadata grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs [&>dt]:text-slate-500 [&>dd]:break-words">
+                <dt>Document ID</dt>
+                <dd className="break-all font-mono text-[11px]">{document.id}</dd>
+                <dt>Loại tệp</dt>
+                <dd>{document.mime_type}</dd>
+                <dt>Kích thước</dt>
+                <dd>{document.file_size} bytes</dd>
+                <dt>Người tải lên</dt>
+                <dd>{document.uploaded_by?.full_name || '—'}</dd>
+                <dt>Thời gian tải lên</dt>
+                <dd>
+                  {new Date(document.uploaded_at).toLocaleString('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                  })}
+                </dd>
+              </dl>
+            </section>
+          )}
         </div>
-        <div className="min-w-0 space-y-5">
-          <section className={cardClass}>
-            <h2 className="mb-4 text-sm font-semibold">Kết quả trích xuất</h2>
+        <div className={approval ? 'min-w-0 space-y-5' : 'contents'}>
+          <section className={cardClass + (approval ? '' : ' order-first md:col-span-2')}>
+            <DetailSectionHeader title="Kết quả trích xuất" />
             {extractionError && (
               <p role="status" className="text-sm text-slate-500">
                 {extractionError}
@@ -447,7 +543,7 @@ function InvoiceReviewLayout({
             )}
             {extraction && (
               <>
-                <dl className="mb-4 grid grid-cols-3 gap-2">
+                <dl className="review-extraction-metrics mb-4 grid grid-cols-3 gap-2">
                   <div className="min-w-0 rounded-lg bg-[#f4f7f5] p-3">
                     <dt className="text-[11px] text-slate-500">Độ tin cậy</dt>
                     <dd className="mt-1 text-lg font-semibold tabular-nums">
@@ -471,33 +567,35 @@ function InvoiceReviewLayout({
                   </div>
                   <div className="min-w-0 rounded-lg bg-[#f4f7f5] p-3">
                     <dt className="text-[11px] text-slate-500">Cần kiểm tra</dt>
-                    <dd className="mt-1 text-lg font-semibold">
+                    <dd className={'mt-1 text-lg font-semibold' + (approval ? ' flex items-center justify-between gap-2' : '')}>
                       {extraction.human_review_required ? 'Có' : 'Không'}
+                      {approval && extraction.human_review_required && <TriangleAlert size={22} className="text-amber-500" aria-hidden="true" />}
                     </dd>
                   </div>
                   <div className="min-w-0 rounded-lg bg-[#f4f7f5] p-3">
                     <dt className="text-[11px] text-slate-500">
                       Số lần thử lại
                     </dt>
-                    <dd className="mt-1 text-lg font-semibold tabular-nums">
+                    <dd className={'mt-1 text-lg font-semibold tabular-nums' + (approval ? ' flex items-center justify-between gap-2' : '')}>
                       {extraction.retry_count}
+                      {approval && <RotateCcw size={20} className="text-slate-400" aria-hidden="true" />}
                     </dd>
                   </div>
                 </dl>
                 <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-2 text-xs [&>dt]:text-slate-500 [&>dd]:break-words">
-                  <dt>Trạng thái AI</dt>
-                  <dd>{extraction.ai_status}</dd>
-                  <dt>Bắt đầu xử lý</dt>
-                  <dd>
-                    {extraction.processing_started_at
-                      ? new Date(
-                          extraction.processing_started_at,
-                        ).toLocaleString('vi-VN', {
-                          timeZone: 'Asia/Ho_Chi_Minh',
-                        })
-                      : '—'}
+                  <dt>Trạng thái trích xuất</dt>
+                  <dd className={approval && extraction.ai_status === 'REVIEW_REQUIRED' ? 'text-amber-600' : undefined}>
+                    {extraction.ai_status === 'SUCCESS' ? (
+                      <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                        {extraction.ai_status}
+                      </span>
+                    ) : approval && extraction.ai_status === 'REVIEW_REQUIRED' ? (
+                      <span className="inline-flex rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+                        {extraction.ai_status}
+                      </span>
+                    ) : extraction.ai_status}
                   </dd>
-                  <dt>Kết thúc xử lý</dt>
+                  <dt>Thời gian hoàn thành</dt>
                   <dd>
                     {extraction.processing_finished_at
                       ? new Date(
@@ -513,37 +611,40 @@ function InvoiceReviewLayout({
                     {extraction.error_code}: {extraction.error_message}
                   </p>
                 )}
-                <details className="mt-4 text-xs">
-                  <summary className="cursor-pointer font-semibold text-brand">
-                    Dữ liệu AI gốc (JSON)
-                  </summary>
-                  <pre className="mt-3 max-h-80 overflow-auto rounded-lg bg-slate-50 p-4">
-                    {JSON.stringify(extraction.raw_json, null, 2)}
-                  </pre>
-                </details>
               </>
             )}
           </section>
-          <form onSubmit={onSave} className={cardClass + ' space-y-4'}>
-            <h2 className="text-sm font-semibold">Dữ liệu hóa đơn</h2>
-            <p className="text-xs leading-relaxed text-slate-500">
-              Dữ liệu hóa đơn được điền từ kết quả trích xuất. Nhập mã tiền tệ
-              và kiểm tra các trường bắt buộc trước khi lưu và xác nhận. Để
-              trống địa chỉ/mã số thuế sẽ giữ nguyên giá trị đã có.
-            </p>
-            {extraction && missingFields.length > 0 && (
-              <p
-                role="status"
-                className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800"
-              >
-                {missingFields.length} trường bắt buộc còn trống:{' '}
-                {missingFields.map((field) => field.label).join(', ')}.
-              </p>
+          <form noValidate onSubmit={onSave} className={cardClass + ' space-y-4'}>
+            <DetailSectionHeader title="Dữ liệu hóa đơn">
+              {approval && extraction?.human_review_required && (
+                <span className="inline-flex items-center gap-2 text-xs font-semibold text-amber-600">
+                  <TriangleAlert size={18} aria-hidden="true" /> Cần kiểm tra
+                </span>
+              )}
+            </DetailSectionHeader>
+            {generalWarnings.length > 0 && (
+              <div role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+                <h3 className="flex items-center gap-2 font-semibold">
+                  {approval && <Info size={18} aria-hidden="true" />}
+                  {approval ? 'Lưu ý' : 'Cảnh báo'}
+                </h3>
+                {approval && <p className="mt-1">Vui lòng kiểm tra và chỉnh sửa các thông tin được cảnh báo trước khi duyệt.</p>}
+                <ul className="mt-1 space-y-1">
+                  {generalWarnings.map(
+                    /** Displays each warning code and target exactly as supplied by the backend. */
+                    (warning, index) => (
+                      <li key={index} className="break-words">
+                        {warning.code} · {warning.target}
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
             )}
             <fieldset disabled={saving || !extraction} className="space-y-6">
               {invoiceFieldGroups.map((group) => (
                 <div key={group.title}>
-                  <h3 className="mb-3 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                  <h3 className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-brand before:h-3 before:w-0.5 before:rounded-full before:bg-brand after:h-px after:flex-1 after:bg-slate-200">
                     {group.title}
                   </h3>
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -553,11 +654,50 @@ function InvoiceReviewLayout({
                         field={field}
                         value={invoice[field.name]}
                         onChange={onFieldChange}
+                        warning={sellerLowConfidence && field.name === 'sellerName'
+                          ? 'Độ tin cậy thấp, vui lòng kiểm tra thông tin'
+                          : undefined}
                       />
                     ))}
                   </div>
                 </div>
               ))}
+              <section aria-labelledby="invoice-items-title" className="min-w-0">
+                <h3 id="invoice-items-title" className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-brand before:h-3 before:w-0.5 before:rounded-full before:bg-brand after:h-px after:flex-1 after:bg-slate-200">Danh sách mặt hàng</h3>
+                {extraction?.items?.length > 0 ? (
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full min-w-[420px] table-fixed text-left text-xs">
+                      <colgroup>
+                        <col style={{ width: '34%' }} />
+                        <col style={{ width: '16%' }} />
+                        <col style={{ width: '25%' }} />
+                        <col style={{ width: '25%' }} />
+                      </colgroup>
+                      <thead className="bg-slate-50 text-slate-500">
+                        <tr>
+                          <th scope="col" className="px-3 py-2 font-medium">Tên mặt hàng</th>
+                          <th scope="col" className="px-3 py-2 text-right font-medium">Số lượng</th>
+                          <th scope="col" className="px-3 py-2 text-right font-medium">Đơn giá</th>
+                          <th scope="col" className="px-3 py-2 text-right font-medium">Thành tiền</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {extraction.items.map(
+                          /** Shows extracted item values without editing or recalculating backend totals. */
+                          (item, index) => (
+                            <tr key={index}>
+                              <td title={item.item_name ?? '—'} className="truncate px-3 py-3">{item.item_name ?? '—'}</td>
+                              <td title={item.quantity ?? '—'} className="truncate px-3 py-3 text-right tabular-nums">{item.quantity ?? '—'}</td>
+                              <td title={item.unit_price?.toLocaleString('vi-VN') ?? '—'} className="truncate px-3 py-3 text-right tabular-nums">{item.unit_price?.toLocaleString('vi-VN') ?? '—'}</td>
+                              <td title={item.line_total?.toLocaleString('vi-VN') ?? '—'} className="truncate px-3 py-3 text-right tabular-nums">{item.line_total?.toLocaleString('vi-VN') ?? '—'}</td>
+                            </tr>
+                          ),
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="text-xs text-slate-500">Chưa có dữ liệu mặt hàng.</p>}
+              </section>
               <Button
                 type="submit"
                 disabled={saving || !extraction}
@@ -593,6 +733,7 @@ function InvoiceReviewLayout({
 export default function DocumentDetailPage() {
   const { documentId } = useParams()
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   console.debug('[DocumentDetail] Rendering details', { documentId })
   const review =
     pathname.startsWith('/approvals/') || pathname.startsWith('/invoices/')
@@ -606,9 +747,17 @@ export default function DocumentDetailPage() {
   const [notice, setNotice] = useState('')
   const [version, setVersion] = useState(0)
   const [imageError, setImageError] = useState(false)
+  const [copyMessage, setCopyMessage] = useState('')
   const [retrying, setRetrying] = useState(false)
   const [retryError, setRetryError] = useState('')
   const [retryNotice, setRetryNotice] = useState(0)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const deleteDialogRef = useRef(null)
+  const deletePendingRef = useRef(false)
+  const deleteTitleId = useId()
+  const deleteDescriptionId = useId()
   const retryPendingRef = useRef(false)
   const loadedDocumentId = useRef(null)
   /** Refreshes read-only document details without subscribing the invoice editing routes. */
@@ -624,7 +773,80 @@ export default function DocumentDetailPage() {
     console.debug('[DocumentDetail] Resetting retry feedback', { documentId })
     setRetryError('')
     setRetryNotice(0)
+    setCopyMessage('')
+    setDeleteOpen(false)
+    setDeleteError('')
   }, [documentId])
+  /** Keeps the document deletion confirmation modal aligned with its requested visibility. */
+  useEffect(() => {
+    const dialog = deleteDialogRef.current
+    if (!dialog) return
+    if (deleteOpen && !dialog.open) {
+      console.debug('[DocumentDetail] Opening deletion confirmation', { documentId })
+      dialog.showModal()
+    } else if (!deleteOpen && dialog.open) {
+      console.debug('[DocumentDetail] Closing deletion confirmation', { documentId })
+      dialog.close()
+    }
+  }, [deleteOpen, documentId, document, loading])
+
+  /** Requests confirmation before deleting the loaded document outside the invoice review routes. */
+  function requestDelete() {
+    if (review || !document || deletePendingRef.current || retryPendingRef.current) return
+    console.info('[DocumentDetail] Requesting deletion confirmation', { documentId })
+    setDeleteError('')
+    setDeleteOpen(true)
+  }
+
+  /** Cancels the document deletion dialog unless its API request is already in progress. */
+  function cancelDelete(event) {
+    event?.preventDefault()
+    if (deletePendingRef.current) return
+    console.debug('[DocumentDetail] Document deletion cancelled', { documentId })
+    setDeleteOpen(false)
+    setDeleteError('')
+  }
+
+  /** Allows dismissal by clicking the confirmation backdrop before deletion starts. */
+  function handleDeleteBackdrop(event) {
+    if (event.target !== event.currentTarget) return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (
+      event.clientX < bounds.left || event.clientX > bounds.right ||
+      event.clientY < bounds.top || event.clientY > bounds.bottom
+    ) {
+      console.debug('[DocumentDetail] Dismissing deletion backdrop', { documentId })
+      cancelDelete(event)
+    }
+  }
+
+  /** Deletes the confirmed document, refreshes shared totals and returns to the document list after success. */
+  async function handleDelete() {
+    if (!deleteOpen || !document || review || deletePendingRef.current || retryPendingRef.current) return
+    console.info('[DocumentDetail] Starting document deletion', { documentId })
+    deletePendingRef.current = true
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteDocument(documentId)
+      console.info('[DocumentDetail] Document deleted', { documentId })
+      setDeleteOpen(false)
+      window.dispatchEvent(new CustomEvent('involens:document-deleted', {
+        detail: { filename: document.original_filename },
+      }))
+      window.dispatchEvent(new Event('involens:documents-changed'))
+      navigate('/documents', { replace: true })
+    } catch (failure) {
+      console.error('[DocumentDetail] Document deletion failed', {
+        documentId,
+        message: failure.message,
+      })
+      setDeleteError(failure.message)
+    } finally {
+      deletePendingRef.current = false
+      setDeleting(false)
+    }
+  }
   /** Keeps AI dispatch confirmation visible for three seconds, including during detail refresh. */
   useEffect(() => {
     if (!retryNotice) return
@@ -674,7 +896,7 @@ export default function DocumentDetailPage() {
           taxCode: ai.value.tax_code ?? '',
           invoiceDate: ai.value.invoice_date ?? '',
           totalAmount: String(ai.value.total_amount ?? ''),
-          currency: '',
+          currency: ai.value.currency ?? '',
         })
         console.info('[DocumentDetail] Invoice fields loaded from extraction')
       } else
@@ -692,6 +914,8 @@ export default function DocumentDetailPage() {
   async function handleRetry() {
     if (
       retryPendingRef.current ||
+      deletePendingRef.current ||
+      deleteOpen ||
       review ||
       !canRetryExtraction(document?.current_state)
     )
@@ -744,40 +968,14 @@ export default function DocumentDetailPage() {
     }))
     setNotice('')
   }
-  /** Submits complete invoice data using the documented PATCH rules and reflects the saved transaction. */
+  /** Submits invoice edits for backend validation and reflects the confirmed transaction. */
   async function handleSave(event) {
     event.preventDefault()
     if (saving || !extraction) return
-    console.info('[DocumentDetail] Validating invoice review')
+    console.info('[DocumentDetail] Submitting invoice review for backend validation')
     setError('')
     setNotice('')
-    const today = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Ho_Chi_Minh',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(new Date())
-    const dateParts = Object.fromEntries(
-      today.map((part) => [part.type, part.value]),
-    )
-    const todayDate =
-      dateParts.year + '-' + dateParts.month + '-' + dateParts.day
     const amount = Number(invoice.totalAmount)
-    if (
-      !invoice.sellerName.trim() ||
-      !invoice.invoiceNumber.trim() ||
-      !invoice.currency.trim() ||
-      !invoice.invoiceDate ||
-      invoice.invoiceDate > todayDate ||
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-      console.warn('[DocumentDetail] Invoice validation failed')
-      setError(
-        'Điền tên người bán, số hóa đơn, ngày hóa đơn không sau hôm nay, tổng tiền lớn hơn 0 và mã tiền tệ.',
-      )
-      return
-    }
     const body = {
       sellerName: invoice.sellerName.trim(),
       invoiceNumber: invoice.invoiceNumber.trim(),
@@ -812,9 +1010,22 @@ export default function DocumentDetailPage() {
       window.dispatchEvent(new Event('involens:documents-changed'))
       console.info('[DocumentDetail] Invoice review completed')
     } catch (failure) {
+      console.error('[DocumentDetail] Invoice review failed', { documentId, message: failure.message })
       setError(failure.message)
     } finally {
       setSaving(false)
+    }
+  }
+  /** Copies the current document identifier for reuse outside the detail screen. */
+  async function handleCopyDocumentId() {
+    console.info('[DocumentDetail] Copying document identifier', { documentId })
+    try {
+      await navigator.clipboard.writeText(document.id)
+      setCopyMessage('Đã sao chép Document ID.')
+      console.info('[DocumentDetail] Document identifier copied', { documentId })
+    } catch (exception) {
+      setCopyMessage('Không thể sao chép Document ID. Vui lòng thử lại.')
+      console.error('[DocumentDetail] Copy failed', { documentId, exception })
     }
   }
   const retryNotification = retryNotice > 0 && (
@@ -886,6 +1097,7 @@ export default function DocumentDetailPage() {
   if (review) {
     return (
       <InvoiceReviewLayout
+        approval={pathname.startsWith('/approvals/')}
         document={document}
         extraction={extraction}
         extractionError={extractionError}
@@ -903,20 +1115,71 @@ export default function DocumentDetailPage() {
     )
   }
   return (
-    <>
+    <div className="document-surface document-detail-surface">
       {retryNotification}
       <Link to={returnTo} className="text-xs text-brand">
         ← Quay lại danh sách
       </Link>
-      <header className="my-5">
-        <h1 className="text-xl font-bold">
-          {review ? 'Kiểm tra hóa đơn' : 'Chi tiết tài liệu'}
-        </h1>
-        {review && (
-          <p className="mt-1 break-all text-xs text-slate-500">
-            {document.original_filename}
-          </p>
+      <div className="detail-hero mt-4">
+        <PageHeader
+          title="Chi tiết tài liệu"
+          action={
+            <button
+              type="button"
+              onClick={requestDelete}
+              disabled={deleting || retrying}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-5 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 size={18} aria-hidden="true" />
+              Xóa tài liệu
+            </button>
+          }
+        />
+      </div>
+      <dialog
+        ref={deleteDialogRef}
+        aria-labelledby={deleteTitleId}
+        aria-describedby={deleteDescriptionId}
+        onCancel={cancelDelete}
+        onClick={handleDeleteBackdrop}
+        className="m-auto w-[calc(100%_-_32px)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-2xl backdrop:bg-slate-900/45 backdrop:backdrop-blur-sm"
+      >
+        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+          <Trash2 size={24} aria-hidden="true" />
+        </div>
+        <h2 id={deleteTitleId} className="text-lg font-semibold">Xóa tài liệu?</h2>
+        <p id={deleteDescriptionId} className="mt-2 text-sm leading-6 text-slate-500">
+          Bạn có chắc muốn xóa tài liệu{' '}
+          <span className="break-all font-semibold text-slate-800">“{document.original_filename}”</span>?
+        </p>
+        {deleteError && (
+          <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{deleteError}</p>
         )}
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" autoFocus onClick={cancelDelete} disabled={deleting}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+            Hủy
+          </button>
+          <button type="button" onClick={handleDelete} disabled={deleting}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
+            {deleting ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}
+            {deleting ? 'Đang xóa…' : 'Xóa tài liệu'}
+          </button>
+        </div>
+      </dialog>
+      <header className="my-5 flex flex-wrap items-center gap-3 pr-0!">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <FileText size={20} aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="break-all text-lg font-bold">{document.original_filename}</h2>
+            <StatusBadge status={document.current_state} />
+          </div>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Tải lên bởi {document.uploaded_by?.full_name || '—'} · {new Date(document.uploaded_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} · {Math.round(document.file_size / 1024)} KB
+          </p>
+        </div>
       </header>
       {!review && error && (
         <p role="alert" className="mb-4 text-sm text-red-600">
@@ -926,13 +1189,10 @@ export default function DocumentDetailPage() {
       {!review && (
         <section
           aria-label="Tổng quan tài liệu"
-          className="mb-5 rounded border border-slate-200 bg-white p-4 sm:p-6"
+          className="detail-card mb-5 rounded-2xl border border-slate-200 bg-white p-5 [&_section]:border-0 [&_section]:pt-0 [&_ol]:min-w-[360px] [&_li>span.relative]:size-9 [&_li>span.relative]:border [&_li>span.relative>svg]:size-4 [&_li>span.relative>span]:w-9 [&_li>span.absolute]:left-[calc(50%+24px)] [&_li>span.absolute]:top-[18px] [&_li>span.absolute]:h-px [&_li>span.absolute]:w-[calc(100%-48px)]"
         >
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="min-w-0 flex-1 break-all text-lg font-bold">
-              {document.original_filename}
-            </h2>
-            <StatusBadge status={document.current_state} />
+          <DetailSectionHeader title="Tiến trình xử lý" />
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {canRetryExtraction(document.current_state) && (
               <button
                 type="button"
@@ -961,7 +1221,7 @@ export default function DocumentDetailPage() {
               {retryError}
             </p>
           )}
-          <DocumentPipeline status={document.current_state} />
+          <DocumentPipeline status={document.current_state} showTitle={false} />
         </section>
       )}
       {document.error_message && (
@@ -988,29 +1248,21 @@ export default function DocumentDetailPage() {
           </div>
         </section>
       )}
-      <div className="grid items-start gap-5 lg:grid-cols-2">
+      <div className="grid items-start gap-5 md:grid-cols-2">
         <div className="min-w-0 space-y-5">
-          <section className="rounded border border-slate-200 bg-white p-6">
-            {(review || extraction) && (
-              <div className="mb-5 flex items-center justify-between">
-                {review && <StatusBadge status={document.current_state} />}
-                {!review && extraction && (
-                  <Link
-                    className="text-xs text-brand"
-                    to={'/invoices/' + documentId}
-                  >
-                    Kiểm tra hóa đơn →
-                  </Link>
-                )}
-              </div>
-            )}
-            <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-3 text-xs">
+          <section className="detail-card min-w-0 rounded-2xl border border-slate-200 bg-white p-5">
+            <DetailSectionHeader title="Thông tin tệp" />
+            <dl className="grid grid-cols-[100px_minmax(0,1fr)] gap-3 text-xs">
               <dt>Document ID</dt>
-              <dd className="break-all">{document.id}</dd>
+              <dd className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 break-all font-mono text-[10px]">{document.id}</span>
+                <button type="button" onClick={handleCopyDocumentId} aria-label="Sao chép Document ID" className="shrink-0 rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50">Chép</button>
+                {copyMessage && <span role="status" className="w-full text-slate-600">{copyMessage}</span>}
+              </dd>
               <dt>Loại tệp</dt>
-              <dd>{document.mime_type}</dd>
+              <dd>{document.mime_type?.split('/').pop()?.toUpperCase() || '—'}</dd>
               <dt>Kích thước</dt>
-              <dd>{document.file_size} bytes</dd>
+              <dd>{Math.round(document.file_size / 1024)} KB</dd>
               <dt>Người tải lên</dt>
               <dd>{document.uploaded_by?.full_name || '—'}</dd>
               <dt>Thời gian tải lên</dt>
@@ -1021,80 +1273,39 @@ export default function DocumentDetailPage() {
               </dd>
             </dl>
           </section>
-          <section className="rounded border border-slate-200 bg-white p-6">
-            <h2 className="mb-4 text-sm font-semibold">Kết quả trích xuất</h2>
-            {extractionError && (
-              <p role="status" className="text-sm text-slate-600">
-                {extractionError}
-              </p>
-            )}
-            {extraction && (
-              <>
-                <dl className="grid grid-cols-[160px_minmax(0,1fr)] gap-3 text-xs">
-                  <dt>Trạng thái AI</dt>
-                  <dd>{extraction.ai_status}</dd>
-                  <dt>Cần kiểm tra</dt>
-                  <dd>{extraction.human_review_required ? 'Có' : 'Không'}</dd>
-                  <dt>Độ tin cậy</dt>
-                  <dd>{extraction.overall_confidence ?? '—'}</dd>
-                  <dt>Số lần thử lại</dt>
-                  <dd>{extraction.retry_count}</dd>
-                  <dt>Bắt đầu xử lý</dt>
-                  <dd>
-                    {extraction.processing_started_at
-                      ? new Date(
-                          extraction.processing_started_at,
-                        ).toLocaleString('vi-VN', {
-                          timeZone: 'Asia/Ho_Chi_Minh',
-                        })
-                      : '—'}
-                  </dd>
-                  <dt>Kết thúc xử lý</dt>
-                  <dd>
-                    {extraction.processing_finished_at
-                      ? new Date(
-                          extraction.processing_finished_at,
-                        ).toLocaleString('vi-VN', {
-                          timeZone: 'Asia/Ho_Chi_Minh',
-                        })
-                      : '—'}
-                  </dd>
-                </dl>
-                {extraction.error_code && (
-                  <p className="mt-4 text-xs text-red-600">
-                    {extraction.error_code}: {extraction.error_message}
-                  </p>
-                )}
-                <details className="mt-5 text-xs">
-                  <summary className="cursor-pointer">
-                    Dữ liệu AI gốc (JSON)
-                  </summary>
-                  <pre className="mt-3 max-h-80 overflow-auto rounded bg-slate-50 p-4">
-                    {JSON.stringify(extraction.raw_json, null, 2)}
-                  </pre>
-                </details>
-              </>
+          <section className="detail-card detail-extraction-card min-w-0 rounded-2xl border border-slate-200 bg-white p-5">
+            <DetailSectionHeader title="Kết quả trích xuất">
+              <StatusBadge status={document.current_state} />
+            </DetailSectionHeader>
+            {extractionError && <p role="status" className="mb-4 text-xs leading-5 text-slate-500">{extractionError}</p>}
+            <dl className="grid grid-cols-2 gap-4 text-xs">
+              <div className="min-w-0"><dt className="mb-2 text-slate-500">Nhà cung cấp</dt><dd className="min-h-5 break-words rounded bg-slate-100 px-2 py-1">{extraction?.seller_name || '—'}</dd></div>
+              <div className="min-w-0"><dt className="mb-2 text-slate-500">Ngày hóa đơn</dt><dd className="min-h-5 break-words rounded bg-slate-100 px-2 py-1">{extraction?.invoice_date || '—'}</dd></div>
+              <div className="min-w-0"><dt className="mb-2 text-slate-500">Mã hóa đơn</dt><dd className="min-h-5 break-words rounded bg-slate-100 px-2 py-1">{extraction?.invoice_number || '—'}</dd></div>
+              <div className="min-w-0"><dt className="mb-2 text-slate-500">Tổng tiền</dt><dd className="min-h-5 break-words rounded bg-slate-100 px-2 py-1">{extraction?.total_amount ?? '—'}</dd></div>
+            </dl>
+            {extraction?.error_code && <p className="mt-4 text-xs text-red-600">{extraction.error_code}: {extraction.error_message}</p>}
+            {extraction ? (
+              <Link
+                to={(document.current_state === 'REVIEW_REQUIRED' ? '/approvals/' : '/invoices/') + documentId}
+                className="mt-5 inline-flex rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white hover:opacity-90"
+              >
+                {document.current_state === 'REVIEW_REQUIRED' ? 'Đi tới trang duyệt →' : 'Xem chi tiết trích xuất →'}
+              </Link>
+            ) : (
+              <button type="button" disabled className="mt-5 cursor-not-allowed rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white opacity-50">
+                {document.current_state === 'REVIEW_REQUIRED' ? 'Đi tới trang duyệt →' : 'Xem chi tiết trích xuất →'}
+              </button>
             )}
           </section>
         </div>
-        <section className="min-w-0 rounded border border-slate-200 bg-white p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold">Hóa đơn gốc</h2>
-            {document.file_url && (
-              <a
-                href={document.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-brand hover:underline"
-              >
-                Mở tệp gốc ↗
-              </a>
-            )}
-          </div>
+        <section className="detail-card min-w-0 rounded-2xl border border-slate-200 bg-white p-5">
+          <DetailSectionHeader title="Hóa đơn gốc" />
           {!document.file_url ? (
-            <p role="status" className="text-sm text-slate-500">
+            <div role="status" className="detail-file-placeholder flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 p-6 text-center text-xs text-slate-500">
+              <FileText size={36} className="text-slate-400" aria-hidden="true" />
               Tài liệu chưa có URL tệp hóa đơn.
-            </p>
+            </div>
           ) : document.mime_type === 'application/pdf' ? (
             <iframe
               src={document.file_url}
@@ -1106,16 +1317,17 @@ export default function DocumentDetailPage() {
               Không thể tải ảnh hóa đơn.
             </p>
           ) : (
-            <img
+            <ZoomableInvoiceImage
+              key={document.file_url}
               src={document.file_url}
               alt={'Hóa đơn gốc: ' + document.original_filename}
               onLoad={handleImageLoad}
               onError={handleImageError}
-              className="block h-auto w-full rounded object-contain"
+              viewportClassName="h-[65vh] min-h-[360px]"
             />
           )}
         </section>
       </div>
-    </>
+    </div>
   )
 }

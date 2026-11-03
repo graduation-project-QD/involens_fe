@@ -186,6 +186,8 @@ export default function DocumentsTable({
   allowRetry = false,
   onRetried,
   showAllDocumentsLink = false,
+  dashboard = false,
+  footer = null,
 }) {
   const navigate = useNavigate()
   const [deletingId, setDeletingId] = useState(null)
@@ -311,7 +313,7 @@ export default function DocumentsTable({
   /** Deletes only after confirmation, preventing duplicate requests and retaining errors inside the dialog. */
   async function handleDelete() {
     if (deletePendingRef.current || !deleteTarget) return
-    const { documentId } = deleteTarget
+    const { documentId, filename } = deleteTarget
     deletePendingRef.current = true
     setDeletingId(documentId)
     setDeleteError('')
@@ -319,6 +321,9 @@ export default function DocumentsTable({
       await deleteDocument(documentId)
       console.info('[DocumentsTable] Document deleted', { documentId })
       setDeleteTarget(null)
+      window.dispatchEvent(new CustomEvent('involens:document-deleted', {
+        detail: { filename },
+      }))
       onDeleted?.()
       window.dispatchEvent(new Event('involens:documents-changed'))
     } catch (failure) {
@@ -334,7 +339,13 @@ export default function DocumentsTable({
   }
 
   return (
-    <section className="min-w-0 rounded-md border border-slate-200 bg-white p-5">
+    <section
+      className={
+        dashboard
+          ? 'min-w-0 rounded-2xl border border-slate-200/70 bg-white p-5 shadow-[0_4px_16px_-8px_rgba(15,23,42,0.12)] sm:p-6 [&>h2]:uppercase [&_dialog_h2]:uppercase [&_td]:py-4 [&_thead]:bg-[#f0f5f4] [&_th]:text-[10px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-wider [&_th:first-child]:rounded-l-lg [&_th:last-child]:rounded-r-lg'
+          : 'min-w-0 rounded-md border border-slate-200 bg-white p-5'
+      }
+    >
       <h2 className="mb-4 text-sm font-semibold">{title}</h2>
       {retryNotice > 0 && (
         <div
@@ -415,7 +426,15 @@ export default function DocumentsTable({
         </div>
       </dialog>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px] text-left text-xs">
+        <table className="w-full min-w-[850px] table-fixed text-left text-xs">
+          <colgroup>
+            <col style={{ width: invoices ? '24%' : '34%' }} />
+            {invoices && <col style={{ width: '18%' }} />}
+            <col style={{ width: invoices ? '14%' : '18%' }} />
+            <col style={{ width: '18%' }} />
+            <col style={{ width: invoices ? '16%' : '20%' }} />
+            <col style={{ width: '10%' }} />
+          </colgroup>
           <thead className="bg-slate-50 text-slate-500">
             <tr>
               <th className="p-3">Tên tài liệu</th>
@@ -448,7 +467,8 @@ export default function DocumentsTable({
                 >
                   <td className="p-3">
                     <Link
-                      className="font-medium text-brand hover:underline"
+                      className="block truncate font-medium text-brand hover:underline"
+                      title={document.original_filename}
                       to={
                         '/' +
                         (invoices ? 'invoices' : 'documents') +
@@ -458,14 +478,14 @@ export default function DocumentsTable({
                     >
                       {document.original_filename}
                     </Link>
-                    <p className="mt-1 text-[10px] text-slate-400">
+                    <p className="mt-1 truncate text-[10px] text-slate-400" title={documentId}>
                       {documentId}
                     </p>
                   </td>
                   {invoices && (
-                    <td className="p-3">{document.seller_name || '—'}</td>
+                    <td className="truncate p-3" title={document.seller_name || '—'}>{document.seller_name || '—'}</td>
                   )}
-                  <td className="p-3">{document.uploaded_by_name || '—'}</td>
+                  <td className="truncate p-3" title={document.uploaded_by_name || '—'}>{document.uploaded_by_name || '—'}</td>
                   <td className="p-3">
                     {document.uploaded_at
                       ? new Date(document.uploaded_at).toLocaleString('vi-VN', {
@@ -568,6 +588,7 @@ export default function DocumentsTable({
           Không có tài liệu phù hợp.
         </p>
       )}
+      {footer}
       {showAllDocumentsLink && (
         <Link
           to="/documents"

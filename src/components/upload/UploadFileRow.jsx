@@ -25,14 +25,16 @@ const fileTypeColors = {
 }
 
 /** Hiển thị trạng thái một tài liệu và hành động phù hợp: hủy, xem hoặc xóa. */
-export default function UploadFileRow({ item, onRemove, onView }) {
+export default function UploadFileRow({ item, onRemove, onView, deleting = false }) {
   console.debug('[UploadFileRow] Rendering upload outcome', {
     status: item.status,
+    deleting,
   })
   const style = colors[item.status]
   const badgeColor = fileTypeColors[item.extension] || style.badge
   const success = item.status === 'success'
   const error = item.status === 'error'
+  const actionLabel = deleting ? 'Đang xóa…' : success ? 'Xem' : item.status === 'uploading' ? 'Đang gửi' : 'Xóa'
   return (
     <li
       className={`flex items-center gap-3 rounded-md border px-3.5 py-3 ${style.row}`}
@@ -53,6 +55,11 @@ export default function UploadFileRow({ item, onRemove, onView }) {
         >
           {item.message}
         </p>
+        {item.deleteError && (
+          <p role="alert" className="mt-1 text-[11px] text-red-600">
+            Không thể xóa tài liệu: {item.deleteError}
+          </p>
+        )}
         {item.status === 'uploading' && (
           <div
             role="progressbar"
@@ -74,12 +81,12 @@ export default function UploadFileRow({ item, onRemove, onView }) {
       </div>
       <button
         type="button"
-        disabled={item.status === 'uploading'}
+        disabled={deleting || item.status === 'uploading'}
         onClick={() => (success ? onView(item) : onRemove(item.id))}
-        aria-label={`${success ? 'Xem' : item.status === 'uploading' ? 'Đang gửi' : 'Xóa'} ${item.name}`}
+        aria-label={`${actionLabel} ${item.name}`}
         className={`shrink-0 rounded px-3 py-1.5 text-xs ${success ? 'border border-emerald-200 bg-white text-brand hover:bg-emerald-50' : item.status === 'uploading' ? 'text-slate-500 hover:bg-slate-100' : 'border border-red-200 bg-red-50 text-red-600 hover:border-red-300 hover:bg-red-100'}`}
       >
-        {success ? 'Xem' : item.status === 'uploading' ? 'Đang gửi' : 'Xóa'}
+        {actionLabel}
       </button>
     </li>
   )

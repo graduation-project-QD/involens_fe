@@ -1,5 +1,4 @@
 import {
-  Activity,
   CircleAlert,
   ClipboardList,
   Clock3,
@@ -29,7 +28,6 @@ export const navigation = [
   {
     label: 'Hệ thống',
     items: [
-      { label: 'Nhật ký thao tác', to: '/activity', icon: Activity },
       { label: 'Xuất dữ liệu', to: '/export', icon: Sheet },
       {
         label: 'Quản lý tài khoản',

@@ -72,7 +72,6 @@ export default function App() {
                 'approvals',
                 'errors',
                 'invoices',
-                'activity',
               ].map((kind) => (
                 <Route
                   key={kind}

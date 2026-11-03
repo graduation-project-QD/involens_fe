@@ -1,14 +1,28 @@
 import { useEffect, useState } from 'react'
-import { LogOut, X } from 'lucide-react'
+import { LogOut, UserRound, X } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { navigation } from '../../config/navigation'
 import { useAuth } from '../../context/AuthContext'
 import { getDocumentsByStates, getSummary } from '../../api/documents'
 
+/** Builds the account avatar initials from the first and last name words, leaving missing names for the user icon. */
+function getAvatarInitials(fullName) {
+  const nameParts = fullName?.trim().split(/\s+/).filter(Boolean) ?? []
+  console.debug('[Sidebar] Preparing account avatar', {
+    hasName: nameParts.length > 0,
+  })
+  if (!nameParts.length) return ''
+  const firstInitial = Array.from(nameParts[0])[0]
+  const lastInitial =
+    nameParts.length > 1 ? Array.from(nameParts.at(-1))[0] : ''
+  return (firstInitial + lastInitial).toLocaleUpperCase('vi-VN')
+}
+
 /** Presents navigation, role-scoped account tools, live document badges and session logout. */
 export default function Sidebar({ onNavigate, mobile = false }) {
   console.debug('[Sidebar] Rendering navigation')
   const { user, signOut } = useAuth()
+  const avatarInitials = getAvatarInitials(user?.fullName)
   const [summary, setSummary] = useState(null)
   const [errorDocumentCount, setErrorDocumentCount] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -40,12 +54,16 @@ export default function Sidebar({ onNavigate, mobile = false }) {
         .then((data) => {
           if (!current.signal.aborted) {
             setErrorDocumentCount(data.total)
-            console.info('[Sidebar] Error document count loaded', { total: data.total })
+            console.info('[Sidebar] Error document count loaded', {
+              total: data.total,
+            })
           }
         })
         .catch((error) => {
           if (!current.signal.aborted) {
-            console.warn('[Sidebar] Error document count load failed', { message: error.message })
+            console.warn('[Sidebar] Error document count load failed', {
+              message: error.message,
+            })
             setErrorDocumentCount(null)
           }
         })
@@ -123,12 +141,22 @@ export default function Sidebar({ onNavigate, mobile = false }) {
           to="/profile"
           onClick={onNavigate}
           aria-label="Xem hồ sơ cá nhân"
-          className="mb-4 block rounded px-3 py-2 transition-colors hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+          className="mb-4 flex items-center gap-3 rounded px-3 py-2 transition-colors hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
         >
-          <p className="text-xs font-medium text-white">{user?.fullName}</p>
-          <p className="mt-1 text-[10px]">
-            {user?.role === 'MANAGER' ? 'Quản lý' : 'Nhân viên'}
-          </p>
+          <span
+            aria-hidden="true"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand text-base font-semibold text-white"
+          >
+            {avatarInitials || <UserRound size={20} />}
+          </span>
+          <div className="min-w-0">
+            <p className="break-words text-xs font-medium text-white">
+              {user?.fullName}
+            </p>
+            <p className="mt-1 text-[10px]">
+              {user?.role === 'MANAGER' ? 'Quản lý' : 'Nhân viên'}
+            </p>
+          </div>
         </Link>
         <button
           disabled={busy}

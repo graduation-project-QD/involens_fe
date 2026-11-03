@@ -5,6 +5,36 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 let refreshOperation = null
 let sessionRevision = 0
 
+const apiErrorMessages = {
+  AUTH_INVALID_CREDENTIALS: 'Thông tin xác thực không hợp lệ. Vui lòng kiểm tra và thử lại.',
+  AUTH_ACCOUNT_LOCKED: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.',
+  ACCESS_DENIED: 'Bạn không có quyền thực hiện thao tác này.',
+  VALIDATION_ERROR: 'Dữ liệu gửi lên không hợp lệ. Vui lòng kiểm tra lại.',
+  EMAIL_ALREADY_EXISTS: 'Email này đã được sử dụng.',
+  DOCUMENT_NOT_FOUND: 'Không tìm thấy tài liệu.',
+  EXTRACTION_RESULT_NOT_FOUND: 'Không tìm thấy kết quả trích xuất.',
+  DOCUMENT_UPLOAD_FAILED: 'Tải tài liệu lên thất bại. Vui lòng thử lại.',
+  DUPLICATE_FILE: 'Tài liệu này đã được tải lên trước đó.',
+  EMPTY_FILE: 'Tệp đã chọn không có nội dung.',
+  FILE_TOO_LARGE: 'Dung lượng tệp vượt quá giới hạn cho phép.',
+  UNSUPPORTED_FORMAT: 'Định dạng tệp không được hỗ trợ.',
+}
+
+/** Converts API failures into Vietnamese messages without exposing backend error text. */
+function getApiErrorMessage(code, httpStatus, path) {
+  console.debug('[API] Resolving user-facing error', { code, httpStatus, path })
+  if (path === '/auth/login' && code === 'AUTH_INVALID_CREDENTIALS')
+    return 'Email hoặc mật khẩu không đúng.'
+  if (Object.hasOwn(apiErrorMessages, code)) return apiErrorMessages[code]
+  if (httpStatus === 400) return 'Dữ liệu gửi lên không hợp lệ. Vui lòng kiểm tra lại.'
+  if (httpStatus === 401) return 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.'
+  if (httpStatus === 403) return 'Bạn không có quyền thực hiện thao tác này.'
+  if (httpStatus === 404) return 'Không tìm thấy dữ liệu được yêu cầu.'
+  if (httpStatus === 429) return 'Bạn thao tác quá nhanh. Vui lòng đợi một lát rồi thử lại.'
+  if (httpStatus >= 500) return 'Máy chủ đang gặp sự cố. Vui lòng thử lại sau.'
+  return 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.'
+}
+
 const apiClient = axios.create({
   baseURL: apiBaseUrl,
   headers: { Accept: 'application/json' },
@@ -211,8 +241,7 @@ export async function request(
       result?.status !== 0
     ) {
       const error = new Error(
-        result?.error?.message ||
-          'Yêu cầu thất bại (HTTP ' + response.status + ').',
+        getApiErrorMessage(result?.error?.code, response.status, path),
       )
       error.code = result?.error?.code
       error.httpStatus = response.status
@@ -222,7 +251,7 @@ export async function request(
     return result.data
   } catch (error) {
     if (axios.isCancel(error)) {
-      const cancellation = new Error('Request aborted')
+      const cancellation = new Error('Yêu cầu đã bị hủy.')
       cancellation.name = 'AbortError'
       throw cancellation
     }
@@ -234,7 +263,7 @@ export async function request(
       })
     throw axios.isAxiosError(error) && !error.response
       ? new Error(
-          'Không thể kết nối máy chủ. Kiểm tra kết nối và cấu hình CORS của BE.',
+          'Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.',
         )
       : error
   }
