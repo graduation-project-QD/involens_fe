@@ -41,6 +41,37 @@ const emptyInvoice = {
   currency: '',
 }
 
+const itemFields = [
+  { name: 'item_name', label: 'Tên mặt hàng' },
+  { name: 'quantity', label: 'Số lượng', numeric: true },
+  { name: 'unit_price', label: 'Đơn giá', numeric: true },
+  { name: 'line_total', label: 'Thành tiền', numeric: true, required: true },
+]
+
+/** Converts reviewed items to API values and rejects missing totals or invalid, zero numbers. */
+function prepareInvoiceItems(items) {
+  console.debug('[DocumentDetail] Validating reviewed items', { count: items.length })
+  const result = []
+  for (const [index, item] of items.entries()) {
+    const prepared = {}
+    for (const field of itemFields) {
+      const value = String(item[field.name] ?? '').trim()
+      if (field.required && !value) {
+        console.warn('[DocumentDetail] Missing item total', { row: index + 1 })
+        throw new Error(`Mặt hàng dòng ${index + 1}: vui lòng nhập thành tiền.`)
+      }
+      if (field.numeric && value && (!Number.isFinite(Number(value)) || Number(value) === 0)) {
+        console.warn('[DocumentDetail] Invalid item number', { row: index + 1, field: field.name })
+        throw new Error(`Mặt hàng dòng ${index + 1}: ${field.label} phải là số khác 0.`)
+      }
+      prepared[field.name] = value ? (field.numeric ? Number(value) : value) : null
+    }
+    result.push(prepared)
+  }
+  console.debug('[DocumentDetail] Reviewed items validated', { count: result.length })
+  return result
+}
+
 /** Highlights a document section title and keeps its related actions beside the heading. */
 function DetailSectionHeader({ title, as: Heading = 'h2', children }) {
   console.debug('[DetailSectionHeader] Rendering document section heading', { title })
@@ -405,6 +436,10 @@ function InvoiceReviewLayout({
   extraction,
   extractionError,
   invoice,
+  items,
+  onItemChange,
+  onAddItem,
+  onRemoveItem,
   returnTo,
   saving,
   error,
@@ -664,39 +699,72 @@ function InvoiceReviewLayout({
               ))}
               <section aria-labelledby="invoice-items-title" className="min-w-0">
                 <h3 id="invoice-items-title" className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-brand before:h-3 before:w-0.5 before:rounded-full before:bg-brand after:h-px after:flex-1 after:bg-slate-200">Danh sách mặt hàng</h3>
-                {extraction?.items?.length > 0 ? (
+                {items.length > 0 ? (
                   <div className="overflow-x-auto rounded-lg border border-slate-200">
-                    <table className="w-full min-w-[420px] table-fixed text-left text-xs">
+                    <table className="w-full min-w-[580px] table-fixed text-left text-xs">
                       <colgroup>
-                        <col style={{ width: '34%' }} />
+                        <col style={{ width: '30%' }} />
                         <col style={{ width: '16%' }} />
-                        <col style={{ width: '25%' }} />
-                        <col style={{ width: '25%' }} />
+                        <col style={{ width: '21%' }} />
+                        <col style={{ width: '21%' }} />
+                        <col style={{ width: '12%' }} />
                       </colgroup>
                       <thead className="bg-slate-50 text-slate-500">
                         <tr>
                           <th scope="col" className="px-3 py-2 font-medium">Tên mặt hàng</th>
                           <th scope="col" className="px-3 py-2 text-right font-medium">Số lượng</th>
                           <th scope="col" className="px-3 py-2 text-right font-medium">Đơn giá</th>
-                          <th scope="col" className="px-3 py-2 text-right font-medium">Thành tiền</th>
+                          <th scope="col" className="px-3 py-2 text-right font-medium">Thành tiền *</th>
+                          <th scope="col" className="px-2 py-2 font-medium">Thao tác</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
-                        {extraction.items.map(
-                          /** Shows extracted item values without editing or recalculating backend totals. */
-                          (item, index) => (
-                            <tr key={index}>
-                              <td title={item.item_name ?? '—'} className="truncate px-3 py-3">{item.item_name ?? '—'}</td>
-                              <td title={item.quantity ?? '—'} className="truncate px-3 py-3 text-right tabular-nums">{item.quantity ?? '—'}</td>
-                              <td title={item.unit_price?.toLocaleString('vi-VN') ?? '—'} className="truncate px-3 py-3 text-right tabular-nums">{item.unit_price?.toLocaleString('vi-VN') ?? '—'}</td>
-                              <td title={item.line_total?.toLocaleString('vi-VN') ?? '—'} className="truncate px-3 py-3 text-right tabular-nums">{item.line_total?.toLocaleString('vi-VN') ?? '—'}</td>
-                            </tr>
-                          ),
+                        {items.map(
+                          /** Renders editable item values without recalculating invoice amounts. */
+                          (item, index) => {
+                            console.debug('[InvoiceReview] Rendering editable item', { row: index + 1 })
+                            return (
+                              <tr key={index}>
+                                {itemFields.map(
+                                  /** Labels each input with its item row for review. */
+                                  (field) => {
+                                    console.debug('[InvoiceReview] Rendering item field', { field: field.name })
+                                    return (
+                                      <td key={field.name} className="px-2 py-2">
+                                        <input
+                                          type="text"
+                                          inputMode={field.numeric ? 'decimal' : undefined}
+                                          name={field.name}
+                                          data-index={index}
+                                          value={item[field.name] ?? ''}
+                                          onChange={onItemChange}
+                                          required={field.required}
+                                          aria-label={`${field.label}, dòng ${index + 1}`}
+                                          className={'h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10' + (field.numeric ? ' text-right tabular-nums' : '')}
+                                        />
+                                      </td>
+                                    )
+                                  },
+                                )}
+                                <td className="px-2 py-2 text-center">
+                                  <button type="button" data-index={index} onClick={onRemoveItem}
+                                    aria-label={`Xóa mặt hàng dòng ${index + 1}`}
+                                    className="rounded-lg p-2 text-red-600 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                                    <Trash2 size={16} aria-hidden="true" />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          },
                         )}
                       </tbody>
                     </table>
                   </div>
                 ) : <p className="text-xs text-slate-500">Chưa có dữ liệu mặt hàng.</p>}
+                <button type="button" onClick={onAddItem}
+                  className="mt-3 rounded-lg border border-brand px-3 py-2 text-xs font-semibold text-brand hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                  Thêm mặt hàng
+                </button>
               </section>
               <Button
                 type="submit"
@@ -740,6 +808,7 @@ export default function DocumentDetailPage() {
   const [document, setDocument] = useState(null)
   const [extraction, setExtraction] = useState(null)
   const [invoice, setInvoice] = useState(emptyInvoice)
+  const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -747,7 +816,6 @@ export default function DocumentDetailPage() {
   const [notice, setNotice] = useState('')
   const [version, setVersion] = useState(0)
   const [imageError, setImageError] = useState(false)
-  const [copyMessage, setCopyMessage] = useState('')
   const [retrying, setRetrying] = useState(false)
   const [retryError, setRetryError] = useState('')
   const [retryNotice, setRetryNotice] = useState(0)
@@ -773,7 +841,6 @@ export default function DocumentDetailPage() {
     console.debug('[DocumentDetail] Resetting retry feedback', { documentId })
     setRetryError('')
     setRetryNotice(0)
-    setCopyMessage('')
     setDeleteOpen(false)
     setDeleteError('')
   }, [documentId])
@@ -871,6 +938,7 @@ export default function DocumentDetailPage() {
       setDocument(null)
       setExtraction(null)
       setInvoice(emptyInvoice)
+      setItems([])
       setNotice('')
       setImageError(false)
     }
@@ -889,6 +957,7 @@ export default function DocumentDetailPage() {
       } else setError(metadata.reason.message)
       if (ai.status === 'fulfilled') {
         setExtraction(ai.value)
+        setItems(ai.value.items ?? [])
         setInvoice({
           sellerName: ai.value.seller_name ?? '',
           sellerAddress: ai.value.seller_address ?? '',
@@ -968,6 +1037,34 @@ export default function DocumentDetailPage() {
     }))
     setNotice('')
   }
+  /** Updates one reviewed item field while preserving manually entered amounts. */
+  function handleItemChange(event) {
+    const index = Number(event.target.dataset.index)
+    const { name, value } = event.target
+    console.debug('[DocumentDetail] Editing invoice item', { index, field: name })
+    const nextItems = [...items]
+    nextItems[index] = { ...nextItems[index], [name]: value }
+    setItems(nextItems)
+    setError('')
+    setNotice('')
+  }
+  /** Adds a blank invoice item for the reviewer to complete before confirmation. */
+  function handleAddItem() {
+    console.info('[DocumentDetail] Adding invoice item', { count: items.length + 1 })
+    setItems([...items, { item_name: '', quantity: '', unit_price: '', line_total: '' }])
+    setError('')
+    setNotice('')
+  }
+  /** Removes an item from the pending review without saving immediately. */
+  function handleRemoveItem(event) {
+    const index = Number(event.currentTarget.dataset.index)
+    console.info('[DocumentDetail] Removing invoice item', { index })
+    const nextItems = [...items]
+    nextItems.splice(index, 1)
+    setItems(nextItems)
+    setError('')
+    setNotice('')
+  }
   /** Submits invoice edits for backend validation and reflects the confirmed transaction. */
   async function handleSave(event) {
     event.preventDefault()
@@ -975,22 +1072,31 @@ export default function DocumentDetailPage() {
     console.info('[DocumentDetail] Submitting invoice review for backend validation')
     setError('')
     setNotice('')
+    let reviewedItems
+    try {
+      reviewedItems = prepareInvoiceItems(items)
+    } catch (failure) {
+      console.warn('[DocumentDetail] Invoice item validation failed', { message: failure.message })
+      setError(failure.message)
+      return
+    }
     const amount = Number(invoice.totalAmount)
     const body = {
+      version: extraction.version,
+      items: reviewedItems,
       sellerName: invoice.sellerName.trim(),
-      invoiceNumber: invoice.invoiceNumber.trim(),
+      invoiceNumber: invoice.invoiceNumber.trim() || null,
       invoiceDate: invoice.invoiceDate,
       totalAmount: amount,
       currency: invoice.currency.trim(),
     }
-    // Blank optional fields preserve existing values under the current PATCH rules.
-    if (invoice.sellerAddress.trim())
-      body.sellerAddress = invoice.sellerAddress.trim()
-    if (invoice.taxCode.trim()) body.taxCode = invoice.taxCode.trim()
+    body.sellerAddress = invoice.sellerAddress.trim() || null
+    body.taxCode = invoice.taxCode.trim() || null
     setSaving(true)
     try {
       const data = await saveExtraction(documentId, body)
       setExtraction(data.extraction_result)
+      setItems(data.extraction_result.items ?? [])
       setDocument((current) => ({
         ...current,
         current_state: 'EXTRACT_SUCCESS',
@@ -1014,18 +1120,6 @@ export default function DocumentDetailPage() {
       setError(failure.message)
     } finally {
       setSaving(false)
-    }
-  }
-  /** Copies the current document identifier for reuse outside the detail screen. */
-  async function handleCopyDocumentId() {
-    console.info('[DocumentDetail] Copying document identifier', { documentId })
-    try {
-      await navigator.clipboard.writeText(document.id)
-      setCopyMessage('Đã sao chép Document ID.')
-      console.info('[DocumentDetail] Document identifier copied', { documentId })
-    } catch (exception) {
-      setCopyMessage('Không thể sao chép Document ID. Vui lòng thử lại.')
-      console.error('[DocumentDetail] Copy failed', { documentId, exception })
     }
   }
   const retryNotification = retryNotice > 0 && (
@@ -1102,6 +1196,10 @@ export default function DocumentDetailPage() {
         extraction={extraction}
         extractionError={extractionError}
         invoice={invoice}
+        items={items}
+        onItemChange={handleItemChange}
+        onAddItem={handleAddItem}
+        onRemoveItem={handleRemoveItem}
         returnTo={returnTo}
         saving={saving}
         error={error}
@@ -1256,8 +1354,6 @@ export default function DocumentDetailPage() {
               <dt>Document ID</dt>
               <dd className="flex flex-wrap items-center gap-2">
                 <span className="min-w-0 break-all font-mono text-[10px]">{document.id}</span>
-                <button type="button" onClick={handleCopyDocumentId} aria-label="Sao chép Document ID" className="shrink-0 rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50">Chép</button>
-                {copyMessage && <span role="status" className="w-full text-slate-600">{copyMessage}</span>}
               </dd>
               <dt>Loại tệp</dt>
               <dd>{document.mime_type?.split('/').pop()?.toUpperCase() || '—'}</dd>
