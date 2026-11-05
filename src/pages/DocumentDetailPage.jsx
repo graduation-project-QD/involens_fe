@@ -1111,7 +1111,7 @@ export default function DocumentDetailPage() {
         currency: data.invoice.currency || '',
       })
       setNotice(
-        'Đã lưu và xác nhận hóa đơn. Các tác vụ duyệt liên quan đã hoàn tất.',
+        'Đã lưu',
       )
       window.dispatchEvent(new Event('involens:documents-changed'))
       console.info('[DocumentDetail] Invoice review completed')

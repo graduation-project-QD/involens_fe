@@ -242,7 +242,7 @@ select {
   background: #f8fafc;
 }
 
-.approval-review-surface .invoice-review-grid input:focus {
+.invoice-review-surface .invoice-review-grid input:focus {
   border-color: var(--color-brand);
   outline: none;
   box-shadow: none;

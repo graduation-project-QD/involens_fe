@@ -5,7 +5,6 @@ import {
   FileText,
   FileWarning,
   Plus,
-  RefreshCw,
   ScanText,
   Upload,
 } from 'lucide-react'
@@ -24,7 +23,6 @@ export default function DashboardPage() {
   const [documents, setDocuments] = useState(null)
   const [error, setError] = useState('')
   const [version, setVersion] = useState(0)
-  const [refreshAnimation, setRefreshAnimation] = useState(0)
   /** Refreshes dashboard statistics and recent documents after server status changes. */
   function refreshDocumentStatus() {
     console.info('[Dashboard] Refreshing live document overview')
@@ -56,12 +54,6 @@ export default function DashboardPage() {
   /** Reloads recent documents and dashboard statistics after a document has been deleted. */
   function handleDocumentDeleted() {
     console.info('[Dashboard] Refreshing overview after document deletion')
-    setVersion((current) => current + 1)
-  }
-  /** Reloads document totals and recent uploads, restarting the icon's single rotation for each manual refresh. */
-  function handleRefresh() {
-    console.info('[Dashboard] User requested overview refresh')
-    setRefreshAnimation((current) => current + 1)
     setVersion((current) => current + 1)
   }
   const items = summary
@@ -111,23 +103,6 @@ export default function DashboardPage() {
         description="Tổng quan hoạt động xử lý hóa đơn"
         action={
           <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-emerald-200 hover:bg-emerald-50"
-            >
-              <RefreshCw
-                key={refreshAnimation}
-                size={15}
-                aria-hidden="true"
-                className={
-                  refreshAnimation > 0
-                    ? 'animate-[spin_500ms_linear_1]'
-                    : undefined
-                }
-              />
-              Làm mới
-            </button>
             <Link
               to="/upload"
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-900/15 transition-colors hover:bg-emerald-800"

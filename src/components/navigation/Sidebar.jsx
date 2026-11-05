@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { LogOut, UserRound, X } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { navigation } from '../../config/navigation'
 import { useAuth } from '../../context/AuthContext'
-import { getDocumentsByStates, getSummary } from '../../api/documents'
 
 /** Builds the account avatar initials from the first and last name words, leaving missing names for the user icon. */
 function getAvatarInitials(fullName) {
@@ -18,63 +17,12 @@ function getAvatarInitials(fullName) {
   return (firstInitial + lastInitial).toLocaleUpperCase('vi-VN')
 }
 
-/** Presents navigation, role-scoped account tools, live document badges and session logout. */
+/** Presents navigation, role-scoped account tools and session logout. */
 export default function Sidebar({ onNavigate, mobile = false }) {
   console.debug('[Sidebar] Rendering navigation')
   const { user, signOut } = useAuth()
   const avatarInitials = getAvatarInitials(user?.fullName)
-  const [summary, setSummary] = useState(null)
-  const [errorDocumentCount, setErrorDocumentCount] = useState(null)
   const [busy, setBusy] = useState(false)
-  /** Refreshes badges after upload or invoice approval and cancels requests on unmount. */
-  useEffect(() => {
-    console.debug('[Sidebar] Subscribing to document changes')
-    let controller
-    /** Loads review totals and counts all three document failure states for navigation badges. */
-    function refreshSummary() {
-      console.info('[Sidebar] Loading document badges')
-      controller?.abort()
-      controller = new AbortController()
-      const current = controller
-      getSummary(current.signal)
-        .then((data) => {
-          if (!current.signal.aborted) setSummary(data)
-        })
-        .catch((error) => {
-          if (!current.signal.aborted) {
-            console.warn('[Sidebar] Badge load failed')
-            setSummary(null)
-          }
-        })
-      getDocumentsByStates(
-        { page: 1, page_size: 1 },
-        ['EXTRACT_FAILED', 'UPLOADED_FAILED', 'PENDING_FAILURE'],
-        current.signal,
-      )
-        .then((data) => {
-          if (!current.signal.aborted) {
-            setErrorDocumentCount(data.total)
-            console.info('[Sidebar] Error document count loaded', {
-              total: data.total,
-            })
-          }
-        })
-        .catch((error) => {
-          if (!current.signal.aborted) {
-            console.warn('[Sidebar] Error document count load failed', {
-              message: error.message,
-            })
-            setErrorDocumentCount(null)
-          }
-        })
-    }
-    refreshSummary()
-    window.addEventListener('involens:documents-changed', refreshSummary)
-    return () => {
-      controller?.abort()
-      window.removeEventListener('involens:documents-changed', refreshSummary)
-    }
-  }, [])
   /** Ends the current session while preventing repeated logout requests. */
   async function handleLogout() {
     if (busy) return
@@ -105,12 +53,6 @@ export default function Sidebar({ onNavigate, mobile = false }) {
               {group.items
                 .filter((item) => !item.managerOnly || user?.role === 'MANAGER')
                 .map(({ label, to, icon: Icon }) => {
-                  const badge =
-                    to === '/approvals'
-                      ? summary?.review_required
-                      : to === '/errors' && errorDocumentCount !== null
-                        ? errorDocumentCount
-                        : undefined
                   return (
                     <li key={to}>
                       <NavLink
@@ -125,9 +67,6 @@ export default function Sidebar({ onNavigate, mobile = false }) {
                       >
                         <Icon size={15} />
                         <span className="flex-1">{label}</span>
-                        {badge !== undefined && (
-                          <span className="text-[10px]">{badge}</span>
-                        )}
                       </NavLink>
                     </li>
                   )
