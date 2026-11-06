@@ -54,7 +54,7 @@ export default function UploadDropzone({ onFiles }) {
         }}
       />
       <p className="mt-4 text-[11px] text-slate-500">
-        Hỗ trợ JPG, JPEG, PNG, PDF – tổng dung lượng tối đa 50 MB, mỗi file &lt; 5 MB
+        Hỗ trợ JPG, JPEG, PNG, PDF – tổng dung lượng tối đa 50 MB, mỗi file ≤ 5 MB
       </p>
     </div>
   )

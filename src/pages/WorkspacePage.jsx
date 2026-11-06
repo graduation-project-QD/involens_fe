@@ -27,6 +27,31 @@ const documentStates = {
   PENDING_FAILURE: 'Lỗi chờ xử lý',
 }
 
+/** Translates known AI warnings in queue reasons while preserving unrecognized backend text. */
+function formatReviewReason(reason) {
+  console.debug('[Workspace] Formatting review reason')
+  if (!reason) return '—'
+  const messages = {
+    FIELD_ABSENT: 'Trích xuất thiếu trường dữ liệu',
+    QUANTITY_INFERRED: 'Kiểm tra lại số lượng của mặt hàng',
+  }
+  const parts = []
+  for (const part of reason.split(';')) {
+    const value = part.trim()
+    let code = value
+    if (value.startsWith('{')) {
+      try {
+        code = JSON.parse(value)?.code
+      } catch {
+        console.warn('[Workspace] Preserving unparseable review reason')
+      }
+    }
+    parts.push(Object.hasOwn(messages, code) ? messages[code] : value)
+  }
+  console.debug('[Workspace] Review reason formatted', { count: parts.length })
+  return parts.join('; ')
+}
+
 /** Hosts server document filters and the review queue within the shared dashboard layout. */
 export default function WorkspacePage({ kind }) {
   const location = useLocation()
@@ -410,10 +435,10 @@ function ServerWorkspace({ kind }) {
                     </td>
                     <td className="p-3">
                       <span
-                        title={task.reason || '—'}
+                        title={formatReviewReason(task.reason)}
                         className="inline-block max-w-full truncate rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700"
                       >
-                        {task.reason || '—'}
+                        {formatReviewReason(task.reason)}
                       </span>
                     </td>
                     <td className="p-3">

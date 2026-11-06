@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { TriangleAlert } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 import Button from '../components/ui/Button'
 import UploadDropzone from '../components/upload/UploadDropzone'
@@ -12,10 +13,17 @@ export default function UploadPage() {
   const [items, setItems] = useState([])
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [serverBatchSizeError, setServerBatchSizeError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
   const deletePendingRef = useRef(false)
   const nextFileId = useRef(0)
   const navigate = useNavigate()
+  const maxBatchSize = 50 * 1024 * 1024
+  const readyBatchSize = items.reduce(
+    (total, item) => total + (item.status === 'ready' ? item.file.size : 0),
+    0,
+  )
+  const showBatchSizeError = readyBatchSize > maxBatchSize
   /** Adds selected files after checking the backend size, extension and MIME requirements. */
   function addFiles(files) {
     console.info('[Upload] Validating selected files', { count: files.length })
@@ -30,8 +38,8 @@ export default function UploadPage() {
       const extension = file.name.split('.').pop().toLowerCase()
       const error = !file.size
         ? 'Tệp không được rỗng.'
-        : file.size > 10 * 1024 * 1024
-          ? 'Tệp vượt quá 10 MB.'
+        : file.size > 5 * 1024 * 1024
+          ? 'Tệp vượt quá 5 MB.'
           : !mimeTypes[extension] || file.type !== mimeTypes[extension]
             ? 'Định dạng hoặc MIME không hợp lệ (JPG/JPEG/PNG/PDF).'
             : ''
@@ -48,6 +56,7 @@ export default function UploadPage() {
     })
     setItems((current) => [...current, ...added])
     setNotice('')
+    setServerBatchSizeError('')
   }
   /** Deletes a failed upload record by its returned ID, or removes a file that has no server record. */
   async function removeFile(id) {
@@ -57,6 +66,7 @@ export default function UploadPage() {
     if (!item.documentId) {
       console.debug('[Upload] Removing local file selection', { id })
       setItems((current) => current.filter((candidate) => candidate.id !== id))
+      setServerBatchSizeError('')
       return
     }
     deletePendingRef.current = true
@@ -68,6 +78,7 @@ export default function UploadPage() {
     try {
       await deleteDocument(item.documentId)
       setItems((current) => current.filter((candidate) => candidate.id !== id))
+      setServerBatchSizeError('')
       window.dispatchEvent(new Event('involens:documents-changed'))
       console.info('[Upload] Failed upload record deleted', { documentId: item.documentId })
     } catch (failure) {
@@ -88,11 +99,19 @@ export default function UploadPage() {
     console.debug('[Upload] Opening uploaded document')
     navigate('/documents/' + item.documentId)
   }
-  /** Sends ready files once and displays each returned upload status without claiming AI completion. */
+  /** Validates the ready batch's total size before uploading and displaying each file's result. */
   async function uploadFiles() {
     if (busy || deletePendingRef.current) return
     const ready = items.filter((item) => item.status === 'ready')
     if (!ready.length) return
+    setServerBatchSizeError('')
+    const totalSize = readyBatchSize
+    console.debug('[Upload] Validating batch size', { totalSize, maxBatchSize })
+    if (totalSize > maxBatchSize) {
+      console.warn('[Upload] Batch size exceeds upload limit', { totalSize, maxBatchSize })
+      setNotice('')
+      return
+    }
     console.info('[Upload] Sending batch', { count: ready.length })
     setBusy(true)
     setNotice('')
@@ -143,6 +162,20 @@ export default function UploadPage() {
       window.dispatchEvent(new Event('involens:documents-changed'))
       console.info('[Upload] Batch completed')
     } catch (failure) {
+      if (failure.code === 'UPLOAD_REQUEST_TOO_LARGE') {
+        console.warn('[Upload] Server rejected batch size; keeping files ready for retry', {
+          count: ready.length,
+        })
+        setServerBatchSizeError(failure.message)
+        setItems((current) =>
+          current.map((item) =>
+            ready.some((candidate) => candidate.id === item.id)
+              ? { ...item, status: 'ready', message: 'Sẵn sàng tải lên' }
+              : item,
+          ),
+        )
+        return
+      }
       setNotice(failure.message)
       setItems((current) =>
         current.map((item) =>
@@ -186,6 +219,17 @@ export default function UploadPage() {
         >
           {busy ? 'Đang tải lên...' : 'Upload & Xử lý'}
         </Button>
+        {(showBatchSizeError || serverBatchSizeError) && (
+          <div role="alert" className="mt-3 flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-red-600">
+            <TriangleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="text-xs font-medium">Tổng dung lượng vượt giới hạn 50 MB</p>
+              <p className="mt-0.5 text-[11px]">
+                Hãy bỏ bớt tệp để tiếp tục tải lên. Các tệp còn lại vẫn đang nằm ở đây trong danh sách.
+              </p>
+            </div>
+          </div>
+        )}
         {notice && (
           <p role="status" className="mt-3 text-xs text-slate-600">
             {notice}

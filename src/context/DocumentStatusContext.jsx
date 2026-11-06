@@ -9,8 +9,10 @@ import {
 import { Client } from '@stomp/stompjs'
 import { WifiOff } from 'lucide-react'
 import { getValidSession, readSession } from '../api/client'
+import { getNotificationSummary } from '../api/notifications'
 
 const DocumentStatusContext = createContext(null)
+const NotificationContext = createContext(null)
 const documentStates = new Set([
   'UPLOADED',
   'UPLOADED_FAILED',
@@ -21,10 +23,32 @@ const documentStates = new Set([
   'PENDING_FAILURE',
 ])
 
-/** Shares one authenticated status subscription across the approved document screens. */
-export function DocumentStatusProvider({ children }) {
+/** Shares an authenticated socket for the uploader bell and approved document screens. */
+export function DocumentStatusProvider({ children, liveDocuments = true }) {
   console.debug('[DocumentStatus] Rendering connection boundary')
   const listeners = useRef(new Set())
+  const documentUpdatesEnabled = useRef(liveDocuments)
+  documentUpdatesEnabled.current = liveDocuments
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [notificationRevision, setNotificationRevision] = useState(0)
+  const summaryRevision = useRef(0)
+  /** Synchronizes the badge while protecting newer websocket counts from stale responses. */
+  const refreshSummary = useCallback(async () => {
+    console.info('[Notifications] Synchronizing unread count')
+    const revision = ++summaryRevision.current
+    try {
+      const summary = await getNotificationSummary()
+      if (
+        !Number.isSafeInteger(summary?.unreadCount) ||
+        summary.unreadCount < 0
+      )
+        throw new Error('Invalid unread count')
+      if (revision === summaryRevision.current)
+        setUnreadCount(summary.unreadCount)
+    } catch {
+      console.warn('[Notifications] Could not synchronize unread count')
+    }
+  }, [])
   const [disconnected, setDisconnected] = useState(false)
   /** Registers a screen's refresh handler without creating another socket connection. */
   const subscribe = useCallback((listener) => {
@@ -72,7 +96,7 @@ export function DocumentStatusProvider({ children }) {
 
     /** Discards invalid messages without exposing payloads or credentials in logs. */
     function receiveMessage(message) {
-      if (disposed) return
+      if (disposed || !documentUpdatesEnabled.current) return
       try {
         const payload = JSON.parse(message.body)
         if (
@@ -102,6 +126,28 @@ export function DocumentStatusProvider({ children }) {
         console.warn(
           '[DocumentStatus] Ignoring unreadable document notification',
         )
+      }
+    }
+
+    /** Applies authoritative unread counts and signals open lists to reload. */
+    function receiveNotification(message) {
+      if (disposed) return
+      console.debug('[Notifications] Receiving badge update')
+      try {
+        const payload = JSON.parse(message.body)
+        if (
+          payload?.type !== 'NOTIFICATIONS_CHANGED' ||
+          !Number.isSafeInteger(payload.unreadCount) ||
+          payload.unreadCount < 0
+        ) {
+          console.warn('[Notifications] Ignoring invalid badge event')
+          return
+        }
+        summaryRevision.current += 1
+        setUnreadCount(payload.unreadCount)
+        setNotificationRevision((value) => value + 1)
+      } catch {
+        console.warn('[Notifications] Ignoring unreadable badge event')
       }
     }
 
@@ -136,6 +182,12 @@ export function DocumentStatusProvider({ children }) {
             if (disposed) return
             console.info('[DocumentStatus] Connected and subscribing')
             connection.subscribe('/user/queue/document-status', receiveMessage)
+            connection.subscribe(
+              '/user/queue/notifications',
+              receiveNotification,
+            )
+            void refreshSummary()
+            setNotificationRevision((value) => value + 1)
             retryDelay = 1000
             setDisconnected(false)
             queueChange()
@@ -166,30 +218,53 @@ export function DocumentStatusProvider({ children }) {
       }
     }
 
+    void refreshSummary()
     void connect()
     return () => {
       console.info('[DocumentStatus] Stopping live document updates')
       disposed = true
+      summaryRevision.current += 1
       window.clearTimeout(reconnectTimer)
       window.clearTimeout(batchTimer)
       if (client) void client.deactivate({ force: true })
     }
-  }, [])
+  }, [refreshSummary])
 
   return (
-    <DocumentStatusContext.Provider value={subscribe}>
-      {disconnected && (
-        <p
-          role="status"
-          className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200/70 bg-amber-50 px-4 py-3 text-sm leading-5 text-amber-800"
-        >
-          <WifiOff aria-hidden="true" className="size-4 shrink-0" />
-          <span>Đang kết nối lại cập nhật trực tiếp…</span>
-        </p>
-      )}
-      {children}
-    </DocumentStatusContext.Provider>
+    <NotificationContext.Provider
+      value={{
+        unreadCount,
+        notificationRevision,
+        refreshSummary,
+        disconnected,
+      }}
+    >
+      <DocumentStatusContext.Provider value={liveDocuments ? subscribe : null}>
+        {children}
+      </DocumentStatusContext.Provider>
+    </NotificationContext.Provider>
   )
+}
+
+/** Supplies shared notification state without opening additional socket connections. */
+export function useNotifications() {
+  console.debug('[Notifications] Reading bell state')
+  return useContext(NotificationContext)
+}
+
+/** Displays connection recovery feedback in the main workspace. */
+export function LiveConnectionNotice() {
+  console.debug('[Notifications] Rendering connection feedback')
+  const { disconnected } = useNotifications()
+  return disconnected ? (
+    <p
+      role="status"
+      className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200/70 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+    >
+      <WifiOff aria-hidden="true" className="size-4 shrink-0" />
+      Đang kết nối lại cập nhật trực tiếp…
+    </p>
+  ) : null
 }
 
 /** Refreshes an approved screen on connection recovery or matching document changes. */

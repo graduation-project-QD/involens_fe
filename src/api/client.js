@@ -17,6 +17,7 @@ const apiErrorMessages = {
   DUPLICATE_FILE: 'Tài liệu này đã được tải lên trước đó.',
   EMPTY_FILE: 'Tệp đã chọn không có nội dung.',
   FILE_TOO_LARGE: 'Dung lượng tệp vượt quá giới hạn cho phép.',
+  UPLOAD_REQUEST_TOO_LARGE: 'Tổng dung lượng các file vượt quá giới hạn cho phép. Vui lòng giảm số lượng file và thử lại.',
   UNSUPPORTED_FORMAT: 'Định dạng tệp không được hỗ trợ.',
 }
 

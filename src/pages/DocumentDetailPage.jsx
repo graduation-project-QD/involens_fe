@@ -370,10 +370,11 @@ const invoiceFieldGroups = [
     fields: [
       {
         name: 'sellerName',
+        warningTarget: 'fields.seller',
         label: 'Nhà cung cấp',
         wide: true,
       },
-      { name: 'sellerAddress', label: 'Địa chỉ nhà cung cấp', wide: true },
+      { name: 'sellerAddress', warningTarget: 'fields.address', label: 'Địa chỉ nhà cung cấp', wide: true },
     ],
   },
   {
@@ -381,11 +382,13 @@ const invoiceFieldGroups = [
     fields: [
       {
         name: 'invoiceDate',
+        warningTarget: 'fields.timestamp',
         label: 'Ngày hóa đơn',
         type: 'date',
       },
       {
         name: 'totalAmount',
+        warningTarget: 'fields.total_cost',
         label: 'Tổng tiền',
         type: 'number',
       },
@@ -394,11 +397,10 @@ const invoiceFieldGroups = [
 ]
 
 /** Displays an editable invoice value and its review warning while leaving validation to the backend. */
-function InvoiceReviewField({ field, value, onChange, warning }) {
-  const warningId = useId()
+function InvoiceReviewField({ field, value, onChange, hasWarning }) {
   console.debug('[InvoiceReviewField] Rendering invoice input', {
     field: field.name,
-    hasWarning: Boolean(warning),
+    hasWarning: Boolean(hasWarning),
   })
   return (
     <label className={'block min-w-0 text-xs ' + (field.wide ? 'sm:col-span-2' : '')}>
@@ -409,16 +411,9 @@ function InvoiceReviewField({ field, value, onChange, warning }) {
         onChange={onChange}
         type={field.type || 'text'}
         step={field.type === 'number' ? 'any' : undefined}
-        aria-describedby={warning ? warningId : undefined}
-        data-warning={warning ? 'true' : undefined}
+        data-warning={hasWarning ? 'true' : undefined}
         className="mt-2 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/10"
       />
-      {warning && (
-        <span id={warningId} role="status" className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-700">
-          <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-          <span>{warning}</span>
-        </span>
-      )}
     </label>
   )
 }
@@ -455,15 +450,16 @@ function InvoiceReviewLayout({
       ? Math.min(100, Math.max(0, confidence * 100))
       : null
   const cardClass = 'detail-card min-w-0 rounded-xl border border-slate-200 bg-white p-5'
-  const generalWarnings = []
-  let sellerLowConfidence = false
+  const generalWarnings = extraction?.warnings ?? []
+  const warningTargets = new Set()
   for (const warning of extraction?.warnings ?? []) {
-    if (approval && warning.code === 'LOW_CONFIDENCE' && warning.target === 'fields.seller') {
-      sellerLowConfidence = true
-    } else {
-      generalWarnings.push(warning)
+    if (approval && typeof warning.target === 'string') {
+      warningTargets.add(warning.target)
     }
   }
+  console.debug('[InvoiceReview] Mapped warning targets to review inputs', {
+    targetCount: warningTargets.size,
+  })
   return (
     <div className={'document-surface invoice-review-surface space-y-5' + (approval ? ' approval-review-surface' : '')}>
       <header className="detail-hero min-h-0! pr-0!">
@@ -620,6 +616,10 @@ function InvoiceReviewLayout({
                       <span className="inline-flex rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
                         {extraction.ai_status}
                       </span>
+                    ) : extraction.ai_status === 'FAILED' ? (
+                      <span className="inline-flex rounded-md border border-red-200 bg-red-50 px-2 py-0.5 font-medium text-red-600">
+                        {extraction.ai_status}
+                      </span>
                     ) : extraction.ai_status}
                   </dd>
                   <dt>Thời gian hoàn thành</dt>
@@ -634,8 +634,8 @@ function InvoiceReviewLayout({
                   </dd>
                 </dl>
                 {extraction.error_code && (
-                  <p className="mt-4 break-words text-xs text-red-600">
-                    {extraction.error_code}: {extraction.error_message}
+                  <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 break-words text-xs text-red-600">
+                    {extraction.error_message}
                   </p>
                 )}
               </>
@@ -649,19 +649,19 @@ function InvoiceReviewLayout({
                 </span>
               )}
             </DetailSectionHeader>
-            {generalWarnings.length > 0 && (
+            {!approval && generalWarnings.length > 0 && (
               <div role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
                 <h3 className="flex items-center gap-2 font-semibold">
-                  {approval && <Info size={18} aria-hidden="true" />}
-                  {approval ? 'Lưu ý' : 'Cảnh báo'}
+                  Cảnh báo
                 </h3>
-                {approval && <p className="mt-1">Vui lòng kiểm tra và chỉnh sửa các thông tin được cảnh báo trước khi duyệt.</p>}
                 <ul className="mt-1 space-y-1">
                   {generalWarnings.map(
-                    /** Displays each warning code and target exactly as supplied by the backend. */
+                    /** Explains inferred quantities and preserves other backend warning details. */
                     (warning, index) => (
                       <li key={index} className="break-words">
-                        {warning.code} · {warning.target}
+                        {warning.code === 'QUANTITY_INFERRED'
+                          ? 'Kiểm tra lại số lượng của mặt hàng'
+                          : <>{warning.code} · {warning.target}</>}
                       </li>
                     ),
                   )}
@@ -681,9 +681,7 @@ function InvoiceReviewLayout({
                         field={field}
                         value={invoice[field.name]}
                         onChange={onFieldChange}
-                        warning={sellerLowConfidence && field.name === 'sellerName'
-                          ? 'Độ tin cậy thấp, vui lòng kiểm tra thông tin'
-                          : undefined}
+                        hasWarning={warningTargets.has(field.warningTarget)}
                       />
                     ))}
                   </div>
@@ -728,6 +726,7 @@ function InvoiceReviewLayout({
                                           inputMode={field.numeric ? 'decimal' : undefined}
                                           name={field.name}
                                           data-index={index}
+                                          data-warning={warningTargets.has(`line_items[${index + 1}].${field.name}`) ? 'true' : undefined}
                                           value={item[field.name] ?? ''}
                                           onChange={onItemChange}
                                           required={field.required}

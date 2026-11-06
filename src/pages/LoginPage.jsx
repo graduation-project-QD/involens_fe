@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Eye, EyeOff, Search } from 'lucide-react'
+import { Check, Eye, EyeOff, LoaderCircle, Search } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Button from '../components/ui/Button'
 import { useAuth } from '../context/AuthContext'
@@ -280,8 +280,12 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={busy}
-                className="mt-2 h-11 w-full rounded-lg"
+                aria-busy={busy}
+                className="mt-2 h-11 w-full rounded-lg transition-[color,background-color,transform] duration-150 enabled:active:scale-[0.98] disabled:cursor-wait motion-reduce:transform-none motion-reduce:transition-none"
               >
+                {busy && (
+                  <LoaderCircle size={18} className="animate-spin" aria-hidden="true" />
+                )}
                 {busy
                   ? isRegistering
                     ? 'Đang tạo tài khoản...'

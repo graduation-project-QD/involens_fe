@@ -10,6 +10,7 @@ import {
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { navigation } from '../../config/navigation'
 import { useAuth } from '../../context/AuthContext'
+import NotificationBell from './NotificationBell'
 
 /** Builds the account avatar from the first and last words of the user's name. */
 function getAvatarInitials(fullName) {
@@ -106,11 +107,12 @@ export default function Sidebar({ onNavigate, mobile = false }) {
   }
   return (
     <aside className="flex h-full w-[228px] flex-col overflow-y-auto bg-sidebar px-3.5 pb-4 pt-6 text-[#98a5b5]">
-      <div className="mb-5 flex items-start justify-between px-3">
-        <Link to="/dashboard" onClick={onNavigate}>
+      <div className="mb-5 flex items-start justify-between gap-2 px-3">
+        <Link to="/dashboard" onClick={onNavigate} className="min-w-0 flex-1">
           <p className="text-base font-bold text-white">Involens</p>
           <p className="mt-1 text-[10px]">Hệ thống trích xuất hóa đơn</p>
         </Link>
+        <NotificationBell onNavigate={onNavigate} mobile={mobile} />
         {mobile && (
           <button aria-label="Đóng menu" onClick={onNavigate}>
             <X size={18} />
