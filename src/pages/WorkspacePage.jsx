@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { RotateCcw, Search } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 import TablePagination from '../components/ui/TablePagination'
 import DocumentsTable from '../components/documents/DocumentsTable'
+import DocumentThumbnail from '../components/documents/DocumentThumbnail'
 import { getDocumentsByStates } from '../api/documents'
 import { getInvoicesByStates } from '../api/invoices'
 import { getReviewTasks } from '../api/reviewTasks'
@@ -28,9 +29,10 @@ const documentStates = {
 
 /** Hosts server document filters and the review queue within the shared dashboard layout. */
 export default function WorkspacePage({ kind }) {
+  const location = useLocation()
   console.debug('[Workspace] Rendering workspace', { kind })
   if (kind === 'upload') return <UploadPage />
-  return <ServerWorkspace key={kind} kind={kind} />
+  return <ServerWorkspace key={kind + ':' + location.key} kind={kind} />
 }
 
 /** Fetches paginated lists using only filters supported by the documented backend. */
@@ -44,12 +46,67 @@ function ServerWorkspace({ kind }) {
       : kind === 'invoices'
         ? ['EXTRACT_SUCCESS', 'REVIEW_REQUIRED', 'EXTRACT_FAILED']
         : Object.keys(documentStates)
-  const [query, setQuery] = useState({
-    page: 1,
-    page_size: ['documents', 'invoices', 'approvals'].includes(kind) ? 8 : 10,
-    selected_states: [],
-    status: review ? 'PENDING' : '',
+  const persistQuery = ['documents', 'errors', 'invoices'].includes(kind)
+  const queryStorageKey = 'involens:workspace-query:' + kind
+  /** Restores this document list's page and submitted filters when returning from details. */
+  const [query, setQuery] = useState(() => {
+    const defaults = {
+      page: 1,
+      page_size: ['documents', 'invoices', 'approvals'].includes(kind) ? 8 : 10,
+      selected_states: [],
+      status: review ? 'PENDING' : '',
+    }
+    if (!persistQuery) return defaults
+    console.debug('[Workspace] Restoring saved list query', { kind })
+    try {
+      const saved = JSON.parse(
+        sessionStorage.getItem(queryStorageKey) || 'null',
+      )
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved))
+        return defaults
+      const restored = {
+        ...defaults,
+        page:
+          Number.isInteger(saved.page) && saved.page > 0
+            ? saved.page
+            : defaults.page,
+        page_size:
+          Number.isInteger(saved.page_size) && saved.page_size > 0
+            ? saved.page_size
+            : defaults.page_size,
+        selected_states: Array.isArray(saved.selected_states)
+          ? saved.selected_states.filter((state) => states.includes(state))
+          : [],
+        q: typeof saved.q === 'string' ? saved.q : '',
+        date_from: typeof saved.date_from === 'string' ? saved.date_from : '',
+        date_to: typeof saved.date_to === 'string' ? saved.date_to : '',
+      }
+      console.info('[Workspace] Saved list query restored', {
+        kind,
+        page: restored.page,
+      })
+      return restored
+    } catch (failure) {
+      console.warn('[Workspace] Could not restore list query', {
+        kind,
+        message: failure.message,
+      })
+      return defaults
+    }
   })
+  /** Keeps each document list's pagination and applied filters available within the current tab. */
+  useEffect(() => {
+    if (!persistQuery) return
+    console.debug('[Workspace] Saving list query', { kind, page: query.page })
+    try {
+      sessionStorage.setItem(queryStorageKey, JSON.stringify(query))
+    } catch (failure) {
+      console.warn('[Workspace] Could not save list query', {
+        kind,
+        message: failure.message,
+      })
+    }
+  }, [kind, persistQuery, queryStorageKey, query])
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -109,7 +166,7 @@ function ServerWorkspace({ kind }) {
       .then((data) => {
         if (!controller.signal.aborted) {
           const lastPage = Math.max(1, Math.ceil(data.total / query.page_size))
-          if (kind === 'documents' && query.page > lastPage) {
+          if (!review && query.page > lastPage) {
             console.info('[Workspace] Returning to last available page', {
               lastPage,
             })
@@ -155,17 +212,13 @@ function ServerWorkspace({ kind }) {
     console.info('[Workspace] Changing rows per page', { kind, pageSize })
     setQuery((current) => ({ ...current, page: 1, page_size: pageSize }))
   }
-  /** Refreshes the filtered list after deletion, returning to the previous page when its last row was removed. */
+  /** Reloads the active filter after deletion; the response determines the last valid page. */
   function handleDocumentDeleted() {
     console.info('[Workspace] Refreshing documents after deletion', {
       kind,
       page: query.page,
     })
-    if (result?.items.length === 1 && query.page > 1) {
-      setQuery((current) => ({ ...current, page: current.page - 1 }))
-    } else {
-      setVersion((current) => current + 1)
-    }
+    setVersion((current) => current + 1)
   }
   /** Reloads retry results, stepping back if the last document leaves the current filtered page. */
   function handleDocumentRetried(updatedDocument) {
@@ -236,6 +289,7 @@ function ServerWorkspace({ kind }) {
       >
         <input
           name="q"
+          defaultValue={query.q || ''}
           type="search"
           aria-label="Tìm tên tài liệu"
           placeholder={
@@ -251,13 +305,19 @@ function ServerWorkspace({ kind }) {
           Từ ngày
           <input
             name="date_from"
+            defaultValue={query.date_from || ''}
             type="date"
             className={'ml-2 ' + fieldClass}
           />
         </label>
         <label className="text-xs">
           Đến ngày
-          <input name="date_to" type="date" className={'ml-2 ' + fieldClass} />
+          <input
+            name="date_to"
+            defaultValue={query.date_to || ''}
+            type="date"
+            className={'ml-2 ' + fieldClass}
+          />
         </label>
         <button
           type="submit"
@@ -323,20 +383,36 @@ function ServerWorkspace({ kind }) {
                     }
                   >
                     <td className="truncate p-3" title={task.document_filename}>
-                      {task.document_id ? (
-                        <Link
-                          to={'/approvals/' + task.document_id}
-                          className="block truncate font-medium text-brand hover:underline"
-                        >
-                          {task.document_filename}
-                        </Link>
-                      ) : (
-                        task.document_filename
-                      )}
+                      <div className="flex items-center gap-2">
+                        <DocumentThumbnail
+                          key={task.thumbnail_url || 'no-thumbnail'}
+                          thumbnailUrl={task.thumbnail_url}
+                        />
+                        {task.document_id ? (
+                          <Link
+                            to={'/approvals/' + task.document_id}
+                            className="min-w-0 truncate font-medium text-brand hover:underline"
+                          >
+                            {task.document_filename}
+                          </Link>
+                        ) : (
+                          <span className="min-w-0 truncate">
+                            {task.document_filename}
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="truncate p-3" title={task.vendor_name || '—'}>{task.vendor_name || '—'}</td>
+                    <td
+                      className="truncate p-3"
+                      title={task.vendor_name || '—'}
+                    >
+                      {task.vendor_name || '—'}
+                    </td>
                     <td className="p-3">
-                      <span title={task.reason || '—'} className="inline-block max-w-full truncate rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                      <span
+                        title={task.reason || '—'}
+                        className="inline-block max-w-full truncate rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700"
+                      >
                         {task.reason || '—'}
                       </span>
                     </td>
@@ -396,6 +472,7 @@ function ServerWorkspace({ kind }) {
           }
           title={titles[kind]}
           invoices={kind === 'invoices'}
+          allowSelection={['documents', 'errors', 'invoices'].includes(kind)}
           loading={loading}
           footer={pagination}
           onDeleted={handleDocumentDeleted}

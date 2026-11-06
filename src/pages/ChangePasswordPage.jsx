@@ -1,10 +1,50 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, KeyRound } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { changePassword } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
 import PageHeader from '../components/ui/PageHeader'
 import Button from '../components/ui/Button'
+
+/** Displays a password field with independent visibility while preserving form validation and its value. */
+function PasswordField({ name, label, autoComplete, minLength, describedBy }) {
+  console.debug('[ChangePassword] Rendering password field', { field: name })
+  const [visible, setVisible] = useState(false)
+
+  /** Toggles only this field's visibility without submitting the form or logging its password. */
+  function toggleVisibility() {
+    console.debug('[ChangePassword] Toggling password visibility', { field: name, visible: !visible })
+    setVisible(!visible)
+  }
+
+  return (
+    <div>
+      <label htmlFor={name} className="block text-sm font-semibold">{label}</label>
+      <div className="relative mt-2">
+        <input
+          id={name}
+          name={name}
+          type={visible ? 'text' : 'password'}
+          autoComplete={autoComplete}
+          required
+          minLength={minLength}
+          aria-describedby={describedBy}
+          className="h-10 w-full rounded border border-slate-200 pl-3 pr-11"
+        />
+        <button
+          type="button"
+          onClick={toggleVisibility}
+          aria-label={`${visible ? 'Ẩn' : 'Hiện'} ${label.toLocaleLowerCase('vi-VN')}`}
+          aria-pressed={visible}
+          aria-controls={name}
+          className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded text-slate-500 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+        >
+          {visible ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /** Changes the user's password after local validation and ends the current session on success. */
 export default function ChangePasswordPage() {
@@ -75,19 +115,10 @@ export default function ChangePasswordPage() {
       />
       <form onSubmit={handleSubmit} className="max-w-xl space-y-4 rounded-md border border-slate-200 bg-white p-6">
         <fieldset disabled={busy} className="space-y-4">
-          <label className="block text-xs">
-            Mật khẩu hiện tại
-            <input name="currentPassword" type="password" autoComplete="current-password" required className="mt-2 h-10 w-full rounded border border-slate-200 px-3" />
-          </label>
-          <label className="block text-xs">
-            Mật khẩu mới
-            <input name="newPassword" type="password" autoComplete="new-password" required minLength={8} aria-describedby="new-password-rules" className="mt-2 h-10 w-full rounded border border-slate-200 px-3" />
-          </label>
+          <PasswordField name="currentPassword" label="Mật khẩu hiện tại" autoComplete="current-password" />
+          <PasswordField name="newPassword" label="Mật khẩu mới" autoComplete="new-password" minLength={8} describedBy="new-password-rules" />
           <p id="new-password-rules" className="text-xs text-slate-500">Ít nhất 8 ký tự, có chữ hoa, ký tự đặc biệt và không có khoảng trắng.</p>
-          <label className="block text-xs">
-            Xác nhận mật khẩu mới
-            <input name="confirmPassword" type="password" autoComplete="new-password" required className="mt-2 h-10 w-full rounded border border-slate-200 px-3" />
-          </label>
+          <PasswordField name="confirmPassword" label="Xác nhận mật khẩu mới" autoComplete="new-password" />
           {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
           <Button type="submit" disabled={busy}>
             <KeyRound size={16} aria-hidden="true" />

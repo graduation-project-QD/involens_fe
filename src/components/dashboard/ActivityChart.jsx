@@ -17,17 +17,17 @@ export default function ActivityChart({ data }) {
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0 top-0 h-40 border-b border-slate-100 bg-[linear-gradient(to_bottom,#f1f5f9_1px,transparent_1px)] bg-[length:100%_25%]"
           />
-          <div className="relative flex items-end gap-3 sm:gap-6">
+          <div className="relative flex items-end gap-3">
             {data.map((item) => (
               <div
                 key={item.day}
-                className="group flex min-w-0 flex-1 flex-col items-center"
+                className="flex min-w-0 flex-1 flex-col items-center"
               >
                 <div className="flex h-40 w-full items-end justify-center">
                   <div
                     tabIndex={0}
                     aria-label={`${item.day}: ${item.value} tài liệu`}
-                    className={`relative w-full max-w-10 rounded-t-lg transition-[filter] hover:brightness-110 focus:brightness-110 ${item.value === 0 ? 'bg-emerald-100' : 'bg-gradient-to-t from-emerald-700 to-emerald-400'}`}
+                    className="group relative w-full rounded-t-sm border-t-2 border-emerald-800 bg-[#e2efea] transition-colors hover:bg-[#d4e8df] focus-visible:bg-[#d4e8df]"
                     style={{
                       height:
                         item.value === 0
@@ -37,7 +37,7 @@ export default function ActivityChart({ data }) {
                   >
                     <span
                       aria-hidden="true"
-                      className={`absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-medium tabular-nums ${item.value === 0 ? 'text-slate-400' : 'text-emerald-700'}`}
+                      className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-emerald-900 px-2 py-1 text-[11px] font-medium leading-none tabular-nums text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     >
                       {item.value}
                     </span>

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { getMe, login, logout } from '../api/auth'
+import { getMe, login, logout, register } from '../api/auth'
 import {
   getValidSession,
   readSession,
@@ -92,6 +92,20 @@ export function AuthProvider({ children }) {
     setError('')
     console.info('[Auth] Login completed')
   }
+  /** Registers an account and starts its tab session using the returned backend credentials. */
+  async function signUp(details) {
+    console.info('[Auth] Starting registration')
+    try {
+      const result = await register(details)
+      const next = storeSession(result)
+      setSession(next)
+      setError('')
+      console.info('[Auth] Registration completed')
+    } catch (failure) {
+      console.warn('[Auth] Registration failed', { code: failure.code })
+      throw failure
+    }
+  }
   /** Revokes the server session and clears local credentials even when logout fails. */
   async function signOut() {
     console.info('[Auth] Starting logout')
@@ -109,7 +123,7 @@ export function AuthProvider({ children }) {
   }
   return (
     <AuthContext.Provider
-      value={{ user: session?.user, loading, error, signIn, signOut }}
+      value={{ user: session?.user, loading, error, signIn, signUp, signOut }}
     >
       {children}
     </AuthContext.Provider>

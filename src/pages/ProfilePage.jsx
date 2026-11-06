@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { KeyRound } from 'lucide-react'
+import { CalendarDays, KeyRound, Mail, UserRound } from 'lucide-react'
 import { getMe } from '../api/auth'
 import PageHeader from '../components/ui/PageHeader'
 
-const roleLabels = { MANAGER: 'Quản lý', EMPLOYEE: 'Nhân viên' }
+/** Displays the account creation date through whole seconds while preserving the API's time. */
+function formatCreatedAt(createdAt) {
+  console.debug('[Profile] Formatting account creation date', {
+    hasCreatedAt: Boolean(createdAt),
+  })
+  if (!createdAt) return '—'
+  return createdAt
+    .replace(/^(\d{4})-(\d{2})-(\d{2})T/, '$3/$2/$1 ')
+    .replace(/(\d{2}:\d{2}:\d{2})\.\d+/, '$1')
+}
 
 /** Displays the authenticated user's read-only profile retrieved from the identity API. */
 export default function ProfilePage() {
@@ -52,13 +61,8 @@ export default function ProfilePage() {
   return (
     <>
       <PageHeader
-        title="Hồ sơ cá nhân"
-        action={
-          <Link to="/change-password" className="ml-auto inline-flex min-h-9 items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#074d39]">
-            <KeyRound size={16} aria-hidden="true" />
-            Đổi mật khẩu
-          </Link>
-        }
+        title="Thông tin tài khoản"
+        description="Xem thông tin cá nhân hoặc đổi mật khẩu"
       />
       {loading && (
         <p role="status" className="py-6 text-sm text-slate-500">
@@ -70,21 +74,44 @@ export default function ProfilePage() {
           {error}
         </p>
       )}
-      {profile && (
-        <section className="max-w-xl rounded-md border border-slate-200 bg-white p-6">
-          <h2 className="mb-5 text-sm font-semibold">Thông tin tài khoản</h2>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-4 text-xs">
-            <dt className="text-slate-500">ID</dt>
-            <dd>{profile.id}</dd>
-            <dt className="text-slate-500">Email</dt>
-            <dd className="break-all">{profile.email}</dd>
-            <dt className="text-slate-500">Họ tên</dt>
-            <dd className="break-words">{profile.fullName}</dd>
-            <dt className="text-slate-500">Vai trò</dt>
-            <dd>{roleLabels[profile.role] || profile.role}</dd>
-          </dl>
-        </section>
-      )}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        {profile && (
+          <section aria-label="Thông tin cá nhân" className="min-w-0 rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center">
+            <div aria-hidden="true" className="mx-auto flex h-[90px] w-[90px] items-center justify-center rounded-full bg-brand text-4xl font-semibold text-white">
+              {profile.fullName?.trim().charAt(0).toLocaleUpperCase('vi-VN')}
+            </div>
+            <h2 className="mt-4 break-words text-lg font-semibold">{profile.fullName}</h2>
+            <p className="mt-1 break-all text-sm text-slate-500">{profile.email}</p>
+          </section>
+        )}
+        <div className="min-w-0 space-y-5 lg:col-start-2">
+          {profile && (
+            <section className="rounded-2xl border border-slate-200 bg-white px-6 pb-2 pt-6">
+              <h2 className="border-b border-slate-200 pb-3 text-base font-semibold">Thông tin tài khoản</h2>
+              <dl className="text-sm">
+                <div className="grid grid-cols-[100px_minmax(0,1fr)] gap-3 border-b border-slate-200 py-4 sm:grid-cols-[128px_minmax(0,1fr)]">
+                  <dt className="flex items-center gap-3 text-slate-500"><Mail size={20} className="shrink-0" aria-hidden="true" />Email</dt>
+                  <dd className="break-all font-medium">{profile.email}</dd>
+                </div>
+                <div className="grid grid-cols-[100px_minmax(0,1fr)] gap-3 border-b border-slate-200 py-4 sm:grid-cols-[128px_minmax(0,1fr)]">
+                  <dt className="flex items-center gap-3 text-slate-500"><UserRound size={20} className="shrink-0" aria-hidden="true" />Họ tên</dt>
+                  <dd className="break-words font-medium">{profile.fullName}</dd>
+                </div>
+                <div className="grid grid-cols-[100px_minmax(0,1fr)] gap-3 py-4 sm:grid-cols-[128px_minmax(0,1fr)]">
+                  <dt className="flex items-center gap-3 text-slate-500"><CalendarDays size={20} className="shrink-0" aria-hidden="true" />Ngày tạo</dt>
+                  <dd className="break-words font-medium">{formatCreatedAt(profile.createdAt)}</dd>
+                </div>
+              </dl>
+            </section>
+          )}
+          <div className="flex justify-end">
+            <Link to="/change-password" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-brand bg-white px-5 py-2 text-sm font-semibold text-brand transition-colors hover:bg-emerald-50">
+              <KeyRound size={18} aria-hidden="true" />
+              Đổi mật khẩu
+            </Link>
+          </div>
+        </div>
+      </div>
     </>
   )
 }

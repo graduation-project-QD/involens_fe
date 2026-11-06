@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   List,
   Sheet,
-  Upload,
   Users,
 } from 'lucide-react'
 
@@ -18,17 +17,20 @@ export const navigation = [
   {
     label: 'Tài liệu',
     items: [
-      { label: 'Tải lên', to: '/upload', icon: Upload },
-      { label: 'Danh sách tài liệu', to: '/documents', icon: List },
-      { label: 'Hàng đợi duyệt', to: '/approvals', icon: Clock3 },
+      { label: 'Tất cả tài liệu', to: '/documents', icon: List },
+      { label: 'Chờ duyệt', to: '/approvals', icon: Clock3 },
       { label: 'Tài liệu lỗi', to: '/errors', icon: CircleAlert },
-      { label: 'Hóa đơn đã trích xuất', to: '/invoices', icon: ClipboardList },
+      { label: 'Hóa đơn đã xử lý', to: '/invoices', icon: ClipboardList },
     ],
   },
   {
+    label: 'Dữ liệu',
+    items: [{ label: 'Xuất dữ liệu', to: '/export', icon: Sheet }],
+  },
+  {
     label: 'Hệ thống',
+    managerOnly: true,
     items: [
-      { label: 'Xuất dữ liệu', to: '/export', icon: Sheet },
       {
         label: 'Quản lý tài khoản',
         to: '/accounts',

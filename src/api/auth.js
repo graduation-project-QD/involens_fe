@@ -45,6 +45,15 @@ export function login(credentials) {
     authenticated: false,
   })
 }
+/** Registers a public account and returns the backend session without existing credentials. */
+export function register(body) {
+  console.info('[Auth] Registration requested')
+  return request('/auth/register', {
+    method: 'POST',
+    body,
+    authenticated: false,
+  })
+}
 /** Creates a staff account under the authenticated manager. */
 export function createAccount(body) {
   console.debug('[Auth] Account creation requested')

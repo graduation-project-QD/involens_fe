@@ -12,22 +12,48 @@ export default function DashboardLayout() {
   const deletionDismissalTimer = useRef(null)
   const drawer = useRef(null)
   const { pathname } = useLocation()
+  /** Retains list queries during detail visits and clears them after leaving their document workflow. */
+  useEffect(() => {
+    console.debug('[DashboardLayout] Updating saved list navigation scope', {
+      pathname,
+    })
+    try {
+      for (const kind of ['documents', 'errors', 'invoices']) {
+        const detailPrefix = kind === 'invoices' ? '/invoices/' : '/documents/'
+        if (pathname === '/' + kind || pathname.startsWith(detailPrefix))
+          continue
+        sessionStorage.removeItem('involens:workspace-query:' + kind)
+        console.debug('[DashboardLayout] Cleared inactive list query', { kind })
+      }
+    } catch (failure) {
+      console.warn('[DashboardLayout] Could not clear inactive list queries', {
+        message: failure.message,
+      })
+    }
+  }, [pathname])
   const liveDocuments =
     pathname === '/dashboard' ||
     pathname === '/documents' ||
     /^\/documents\/[^/]+$/.test(pathname)
   /** Keeps successful document deletion feedback visible across navigation for three seconds. */
   useEffect(() => {
-    console.debug('[DashboardLayout] Listening for successful document deletions')
+    console.debug(
+      '[DashboardLayout] Listening for successful document deletions',
+    )
 
-    /** Shows the deleted file name and restarts the notice duration after each successful deletion. */
+    /** Shows the deleted file name or batch count and restarts the success notice duration. */
     function handleDocumentDeleted(event) {
       console.info('[DashboardLayout] Showing document deletion confirmation')
       window.clearTimeout(deletionDismissalTimer.current)
-      setDeletionNotice({ filename: event.detail.filename })
+      setDeletionNotice({
+        filename: event.detail.filename,
+        count: event.detail.count,
+      })
       /** Hides the deletion confirmation after its full three-second display period. */
       deletionDismissalTimer.current = window.setTimeout(() => {
-        console.debug('[DashboardLayout] Document deletion confirmation dismissed')
+        console.debug(
+          '[DashboardLayout] Document deletion confirmation dismissed',
+        )
         deletionDismissalTimer.current = null
         setDeletionNotice(null)
       }, 3000)
@@ -36,26 +62,46 @@ export default function DashboardLayout() {
     window.addEventListener('involens:document-deleted', handleDocumentDeleted)
     /** Releases deletion notifications and their pending timer when leaving the dashboard layout. */
     return () => {
-      console.debug('[DashboardLayout] Stopping document deletion notifications')
-      window.removeEventListener('involens:document-deleted', handleDocumentDeleted)
+      console.debug(
+        '[DashboardLayout] Stopping document deletion notifications',
+      )
+      window.removeEventListener(
+        'involens:document-deleted',
+        handleDocumentDeleted,
+      )
       window.clearTimeout(deletionDismissalTimer.current)
       deletionDismissalTimer.current = null
     }
   }, [])
   /** Closes the deletion confirmation immediately and cancels its scheduled dismissal. */
   function dismissDeletionNotice() {
-    console.debug('[DashboardLayout] Closing document deletion confirmation manually')
+    console.debug(
+      '[DashboardLayout] Closing document deletion confirmation manually',
+    )
     window.clearTimeout(deletionDismissalTimer.current)
     deletionDismissalTimer.current = null
     setDeletionNotice(null)
   }
+  /** Closes mobile navigation after selecting a workspace page. */
   useEffect(() => {
+    console.debug(
+      '[DashboardLayout] Closing mobile navigation after route change',
+    )
     setOpen(false)
   }, [pathname])
+  /** Synchronizes the mobile navigation dialog with its requested visibility. */
   useEffect(() => {
+    console.debug('[DashboardLayout] Updating mobile navigation visibility', {
+      open,
+    })
     if (open) drawer.current?.showModal()
     else drawer.current?.close()
   }, [open])
+  /** Opens sidebar navigation on compact screens. */
+  function openNavigation() {
+    console.debug('[DashboardLayout] Opening mobile navigation')
+    setOpen(true)
+  }
   return (
     <div className="min-h-dvh">
       {deletionNotice && (
@@ -65,7 +111,9 @@ export default function DashboardLayout() {
         >
           <Check size={20} className="shrink-0" aria-hidden="true" />
           <p className="min-w-0 break-words">
-            Đã xóa thành công “{deletionNotice.filename}”
+            {deletionNotice.count
+              ? `Đã xóa thành công ${deletionNotice.count} tài liệu`
+              : `Đã xóa thành công “${deletionNotice.filename}”`}
           </p>
           <button
             type="button"
@@ -81,17 +129,15 @@ export default function DashboardLayout() {
         <Sidebar />
       </div>
       <div className="md:ml-[228px]">
-        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-3 md:hidden">
-          <button
-            onClick={() => setOpen(true)}
-            aria-label="Mở menu"
-            className="p-1"
-          >
-            <Menu size={21} />
-          </button>
-          <span className="text-sm font-bold">Involens</span>
-        </div>
         <main className="mx-auto max-w-[1600px] p-5 lg:p-8">
+          <button
+            type="button"
+            onClick={openNavigation}
+            aria-label="Mở menu"
+            className="mb-4 rounded-md p-1 text-slate-600 md:hidden"
+          >
+            <Menu size={21} aria-hidden="true" />
+          </button>
           {liveDocuments ? (
             <DocumentStatusProvider>
               <Outlet />

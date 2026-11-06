@@ -34,11 +34,8 @@ import { useDocumentStatusRefresh } from '../context/DocumentStatusContext'
 const emptyInvoice = {
   sellerName: '',
   sellerAddress: '',
-  invoiceNumber: '',
-  taxCode: '',
   invoiceDate: '',
   totalAmount: '',
-  currency: '',
 }
 
 const itemFields = [
@@ -376,14 +373,12 @@ const invoiceFieldGroups = [
         label: 'Nhà cung cấp',
         wide: true,
       },
-      { name: 'sellerAddress', label: 'Địa chỉ nhà cung cấp' },
-      { name: 'taxCode', label: 'Mã số thuế' },
+      { name: 'sellerAddress', label: 'Địa chỉ nhà cung cấp', wide: true },
     ],
   },
   {
     title: 'Thông tin hóa đơn',
     fields: [
-      { name: 'invoiceNumber', label: 'Mã hóa đơn' },
       {
         name: 'invoiceDate',
         label: 'Ngày hóa đơn',
@@ -394,7 +389,6 @@ const invoiceFieldGroups = [
         label: 'Tổng tiền',
         type: 'number',
       },
-      { name: 'currency', label: 'Mã tiền tệ' },
     ],
   },
 ]
@@ -476,15 +470,13 @@ function InvoiceReviewLayout({
         <Link to={returnTo} className="text-xs text-brand hover:underline">
           ← Quay lại danh sách
         </Link>
+        <PageHeader
+          title={approval ? 'Duyệt kết quả trích xuất' : 'Kiểm tra hóa đơn'}
+          description={document.original_filename}
+        />
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {approval ? 'Duyệt kết quả trích xuất' : 'Kiểm tra hóa đơn'}
-          </h1>
           <StatusBadge status={document.current_state} />
         </div>
-        <p className="mt-1 break-all text-xs text-slate-500">
-          {document.original_filename}
-        </p>
       </header>
       {approval && document.current_state === 'REVIEW_REQUIRED' && extraction && (
         <div role="status" className="approval-ready-banner">
@@ -961,11 +953,8 @@ export default function DocumentDetailPage() {
         setInvoice({
           sellerName: ai.value.seller_name ?? '',
           sellerAddress: ai.value.seller_address ?? '',
-          invoiceNumber: ai.value.invoice_number ?? '',
-          taxCode: ai.value.tax_code ?? '',
           invoiceDate: ai.value.invoice_date ?? '',
           totalAmount: String(ai.value.total_amount ?? ''),
-          currency: ai.value.currency ?? '',
         })
         console.info('[DocumentDetail] Invoice fields loaded from extraction')
       } else
@@ -1085,13 +1074,10 @@ export default function DocumentDetailPage() {
       version: extraction.version,
       items: reviewedItems,
       sellerName: invoice.sellerName.trim(),
-      invoiceNumber: invoice.invoiceNumber.trim() || null,
       invoiceDate: invoice.invoiceDate,
       totalAmount: amount,
-      currency: invoice.currency.trim(),
     }
     body.sellerAddress = invoice.sellerAddress.trim() || null
-    body.taxCode = invoice.taxCode.trim() || null
     setSaving(true)
     try {
       const data = await saveExtraction(documentId, body)
@@ -1104,11 +1090,8 @@ export default function DocumentDetailPage() {
       setInvoice({
         sellerName: data.invoice.seller_name || '',
         sellerAddress: data.invoice.seller_address || '',
-        invoiceNumber: data.invoice.invoice_number || '',
-        taxCode: data.invoice.tax_code || '',
         invoiceDate: data.invoice.invoice_date || '',
         totalAmount: String(data.invoice.total_amount ?? ''),
-        currency: data.invoice.currency || '',
       })
       setNotice(
         'Đã lưu',
@@ -1136,10 +1119,16 @@ export default function DocumentDetailPage() {
     : pathname.startsWith('/invoices/')
       ? '/invoices'
       : '/documents'
+  const pageTitle = review
+    ? pathname.startsWith('/approvals/')
+      ? 'Duyệt kết quả trích xuất'
+      : 'Kiểm tra hóa đơn'
+    : 'Chi tiết tài liệu'
   if (loading)
     return (
       <>
         {retryNotification}
+        <PageHeader title={pageTitle} />
         <p role="status" className="p-6">
           Đang tải chi tiết tài liệu...
         </p>
@@ -1148,14 +1137,15 @@ export default function DocumentDetailPage() {
   if (!document)
     return (
       <section className="mx-auto my-8 w-full max-w-xl rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm sm:my-12 sm:px-10">
+        <PageHeader title={pageTitle} />
         {retryNotification}
         <div className="mx-auto mb-5 flex size-16 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
           <WifiOff aria-hidden="true" className="size-8" />
         </div>
         <div role="alert">
-          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
+          <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
             Không thể tải tài liệu
-          </h1>
+          </h2>
           <p className="mt-3 text-sm leading-6 text-slate-500">
             Vui lòng kiểm tra kết nối và thử lại.
           </p>
@@ -1377,7 +1367,7 @@ export default function DocumentDetailPage() {
             <dl className="grid grid-cols-2 gap-4 text-xs">
               <div className="min-w-0"><dt className="mb-2 text-slate-500">Nhà cung cấp</dt><dd className="min-h-5 break-words rounded bg-slate-100 px-2 py-1">{extraction?.seller_name || '—'}</dd></div>
               <div className="min-w-0"><dt className="mb-2 text-slate-500">Ngày hóa đơn</dt><dd className="min-h-5 break-words rounded bg-slate-100 px-2 py-1">{extraction?.invoice_date || '—'}</dd></div>
-              <div className="min-w-0"><dt className="mb-2 text-slate-500">Mã hóa đơn</dt><dd className="min-h-5 break-words rounded bg-slate-100 px-2 py-1">{extraction?.invoice_number || '—'}</dd></div>
+              <div className="min-w-0"><dt className="mb-2 text-slate-500">Địa chỉ nhà cung cấp</dt><dd title={extraction?.seller_address || undefined} className="min-h-5 truncate rounded bg-slate-100 px-2 py-1">{extraction?.seller_address || '—'}</dd></div>
               <div className="min-w-0"><dt className="mb-2 text-slate-500">Tổng tiền</dt><dd className="min-h-5 break-words rounded bg-slate-100 px-2 py-1">{extraction?.total_amount ?? '—'}</dd></div>
             </dl>
             {extraction?.error_code && <p className="mt-4 text-xs text-red-600">{extraction.error_code}: {extraction.error_message}</p>}

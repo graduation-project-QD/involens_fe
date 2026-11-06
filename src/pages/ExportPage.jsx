@@ -340,13 +340,7 @@ export default function ExportPage() {
                         <tr className="h-10">
                           <th
                             scope="col"
-                            className="w-[16%] px-3 font-bold"
-                          >
-                            Mã hóa đơn
-                          </th>
-                          <th
-                            scope="col"
-                            className="w-[32%] px-3 font-bold"
+                            className="w-[48%] px-3 font-bold"
                           >
                             Nhà cung cấp
                           </th>
@@ -373,17 +367,9 @@ export default function ExportPage() {
                       <tbody className="divide-y divide-slate-100 text-sm font-normal text-[#202735]">
                         {result.data.items.map((invoice, index) => (
                           <tr
-                            key={`${invoice.invoice_number}-${index}`}
+                            key={index}
                             className="h-14 hover:bg-slate-50"
                           >
-                            <td className="px-3">
-                              <span
-                                className="block truncate"
-                                title={invoice.invoice_number}
-                              >
-                                {invoice.invoice_number}
-                              </span>
-                            </td>
                             <td className="px-3">
                               <span
                                 className="block truncate"

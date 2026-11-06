@@ -4,11 +4,9 @@ import {
   Clock3,
   FileText,
   FileWarning,
-  Plus,
   ScanText,
   Upload,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import PageHeader from '../components/ui/PageHeader'
 import StatsGrid from '../components/dashboard/StatsGrid'
 import ActivityChart from '../components/dashboard/ActivityChart'
@@ -97,21 +95,10 @@ export default function DashboardPage() {
       }))
     : []
   return (
-    <div className="-m-5 min-h-dvh bg-[#f3f7f6] p-5 lg:-m-8 lg:p-8 [&>header_h1]:uppercase">
+    <div className="-m-5 min-h-dvh bg-[#f3f7f6] p-5 lg:-m-8 lg:p-8">
       <PageHeader
         title="Dashboard"
         description="Tổng quan hoạt động xử lý hóa đơn"
-        action={
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Link
-              to="/upload"
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-900/15 transition-colors hover:bg-emerald-800"
-            >
-              <Plus size={16} aria-hidden="true" />
-              Tải hóa đơn mới
-            </Link>
-          </div>
-        }
       />
       {error && (
         <p
